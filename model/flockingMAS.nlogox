@@ -1591,23 +1591,24 @@ end
     </plot>
     <button x="26" y="21" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
     <button x="94" y="21" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55">go</button>
-    <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">20.0</input>
-    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">20.0</input>
-    <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">0.0</input>
+    <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">50.0</input>
+    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">40.0</input>
+    <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">5.0</input>
     <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">1000.0</input>
-    <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">0.0</input>
-    <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">0.0</input>
+    <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">500.0</input>
+    <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">500.0</input>
     <input x="24" multiline="false" y="370" height="60" variable="repulsion-radius" type="number" width="156" sizeVersion="0">2.0</input>
     <input x="187" multiline="false" y="370" height="60" variable="repulsion-strength" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="22" multiline="false" y="469" height="60" variable="trade-interval" type="number" width="156" sizeVersion="0">5.0</input>
     <input x="185" multiline="false" y="470" height="60" variable="h" type="number" width="156" sizeVersion="0">2.0</input>
     <input x="20" multiline="false" y="538" height="60" variable="trade-size" type="number" width="156" sizeVersion="0">5000.0</input>
-    <chooser x="372" y="535" height="60" variable="scenario" current="3" width="100" display="scenario">
+    <chooser x="372" y="535" height="60" variable="scenario" current="2" width="100" display="scenario">
       <choice type="string" value="bull-market"></choice>
       <choice type="string" value="bear-market"></choice>
       <choice type="string" value="crash"></choice>
       <choice type="string" value="sideways"></choice>
       <choice type="string" value="bubble"></choice>
+      <choice type="string" value="API"></choice>
     </chooser>
     <input x="373" multiline="false" y="607" height="60" variable="num-days" type="number" width="100">10000.0</input>
     <monitor x="789" precision="17" y="535" height="60" fontSize="11" width="100" display="Total BTC">total-bitcoin</monitor>
@@ -1661,7 +1662,7 @@ end
       </pen>
     </plot>
     <slider x="192" step="1" y="71" max="100" width="155" display="number-of-followers" height="56" min="0" direction="Horizontal" default="12.0" variable="number-of-followers"></slider>
-    <slider x="190" step="0.001" y="11" max="1" width="159" display="stubbornness" height="50" min="0" direction="Horizontal" default="0.87" variable="stubbornness"></slider>
+    <slider x="190" step="0.001" y="11" max="1" width="159" display="stubbornness" height="50" min="0" direction="Horizontal" default="0.878" variable="stubbornness"></slider>
   </widgets>
   <info>## WHAT IS IT?
 
