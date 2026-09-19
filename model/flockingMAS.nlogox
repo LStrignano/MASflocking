@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <model version="NetLogo 7.0.4" snapToGrid="false">
   <code><![CDATA[extensions [ fetch table ]
- 
+
 breed [ agents-a agent-a ]
 breed [ agents-b agent-b ]
 breed [ agents-c agent-c ]
- 
+
 globals [
   prices
   day-index
@@ -21,39 +21,54 @@ globals [
   heterogeneity-index-value
   phase-correlation-ab
 ]
- 
+
 turtles-own [
+  ;; Fixed social network
   flockmates
+
+  ;; Portfolio
   bitcoin-held
   cash-balance
+
+  ;; Persistent velocity
+  velocity-x
+  velocity-y
 ]
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; INIZIALIZZAZIONE DEL PORTAFOGLIO
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to inizializza-portafoglio
   set bitcoin-held random 6
   set cash-balance 50000 + random 1450001
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; SPAWN CIRCOLARE CENTRALE
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to posiziona-al-centro
   let angolo random-float 360
   let raggio random-float spawn-radius
-  setxy (raggio * cos angolo) (raggio * sin angolo)
+
+  setxy (raggio * cos angolo)
+        (raggio * sin angolo)
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; SETUP
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to setup
+
   clear-all
-  import-drawing "grafico_buy_sell.png"
+
+  ;;import-drawing "grafico_buy_sell.png"
+
   set day-index 0
   set btc-prev-price 0
   set btc-return 0
@@ -64,580 +79,1490 @@ to setup
   set op-history []
   set ya-history []
   set yb-history []
+
   set lambda-instability 0
   set heterogeneity-index-value 0
   set phase-correlation-ab 0
- 
+
+
   if trade-interval <= 0 [
-    user-message "Attenzione: trade-interval deve essere > 0. Impostato a 1."
+    user-message
+      "Attenzione: trade-interval deve essere > 0. Impostato a 1."
+
     set trade-interval 1
   ]
- 
+
+
   scarica-dati
- 
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; CREAZIONE AGENTS-A
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
   create-agents-a population-a [
+
     set color yellow
     set size 2
+
     posiziona-al-centro
+
     set heading random 360
+
+    ;; Initial velocity.
+    ;; Every agent starts with speed 1.
+    set velocity-x cos heading
+    set velocity-y sin heading
+
     set flockmates no-turtles
+
     inizializza-portafoglio
   ]
- 
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; CREAZIONE AGENTS-B
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
   create-agents-b population-b [
+
     set color red
     set size 2
+
     posiziona-al-centro
+
     set heading random 360
+
+    ;; Initial velocity.
+    set velocity-x cos heading
+    set velocity-y sin heading
+
     set flockmates no-turtles
+
     inizializza-portafoglio
   ]
- 
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; CREAZIONE AGENTS-C
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
   create-agents-c population-c [
+
     set color cyan
     set size 2
+
     posiziona-al-centro
+
     set heading random 360
+
+    ;; Initial velocity.
+    set velocity-x cos heading
+    set velocity-y sin heading
+
     set flockmates no-turtles
+
     inizializza-portafoglio
   ]
- 
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; CREAZIONE DELLA RETE FISSA
+  ;;
+  ;; Ogni agente sceglie casualmente
+  ;; un numero fisso di agenti della
+  ;; propria specie.
+  ;;
+  ;; La scelta viene fatta UNA SOLA VOLTA
+  ;; durante SETUP.
+  ;;
+  ;; Durante GO i collegamenti non cambiano.
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+  ask agents-a [
+
+    let n
+      min (list
+        number-of-followers
+        (count other agents-a)
+      )
+
+    if n > 0 [
+      set flockmates
+        n-of n other agents-a
+    ]
+  ]
+
+
+  ask agents-b [
+
+    let n
+      min (list
+        number-of-followers
+        (count other agents-b)
+      )
+
+    if n > 0 [
+      set flockmates
+        n-of n other agents-b
+    ]
+  ]
+
+
+  ask agents-c [
+
+    let n
+      min (list
+        number-of-followers
+        (count other agents-c)
+      )
+
+    if n > 0 [
+      set flockmates
+        n-of n other agents-c
+    ]
+  ]
+
+
   reset-ticks
+
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; GO
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to go
+
   set model-trading-volume 0
- 
+
+
   ask turtles [
+
+    ;; Social interaction.
     flock
+
+    ;; Repulsion between different breeds.
     repel-different-breeds
+
+    ;; Market movement and random perturbation.
     swim
   ]
- 
+
+
   tick
+
+
   aggiorna-metriche-stabilita
- 
+
+
   if (ticks mod trade-interval = 0) [
+
     aggiorna-dati
-    ask turtles [ compravendita-bitcoin ]
+
+    ask turtles [
+      compravendita-bitcoin
+    ]
+
     aggiorna-plot-prezzi-e-volume
   ]
- 
+
+
   aggiorna-plot-parametri
-  aggiorna-plot-stabilita
+
+
+  ;; Temporarily disabled because the
+  ;; corresponding plots are not present.
+  ;;
+  ;; aggiorna-plot-stabilita
+
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CORRENTE -- componente X
+;; CORRENTE -- COMPONENTE X
+;;
 ;; Uguale per tutte le specie.
-;; Misura l'ATTIVITA' di mercato: k * |r(t)|
-;; Alta volatilita' => gli agenti si allontanano
-;; dal centro verso la zona di trading attivo.
+;;
+;; Misura l'attivita' di mercato:
+;;
+;;     k * |r(t)|
+;;
+;; Alta volatilita' => spinta verso
+;; la zona di trading attivo.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to-report my-current-x
+
   report k * btc-volatility
+
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CORRENTE -- componente Y
-;; Differenziata per breed (bias direzionale).
+;; CORRENTE -- COMPONENTE Y
 ;;
-;;   agents-a  Trend followers:
-;;     r(t) > 0 (rialzo) => spinta verso l'alto (buy)
-;;     r(t) < 0 (ribasso) => spinta verso il basso (sell)
+;; Differenziata per breed.
 ;;
-;;   agents-b  Contrarians:
-;;     r(t) > 0 (rialzo) => spinta verso il basso (sell)
-;;     r(t) < 0 (ribasso) => spinta verso l'alto (buy)
-;;
-;;   agents-c  Fundamentalists:
-;;     nessun bias direzionale; restano nella fascia centrale
-;;     e operano solo su segnali fondamentali (posizione x).
+;; A = trend followers
+;; B = contrarians
+;; C = fundamentalists
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to-report my-current-y
-  if breed = agents-a [ report  h * btc-return ]
-  if breed = agents-b [ report (- h * btc-return) ]
-  if breed = agents-c [ report 0 ]
+
+  if breed = agents-a [
+    report h * btc-return
+  ]
+
+  if breed = agents-b [
+    report (- h * btc-return)
+  ]
+
+  if breed = agents-c [
+    report 0
+  ]
+
   report 0
+
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; MOVIMENTO
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to swim
-  let next-x xcor + my-current-x + dx * random-float 5
-  let next-y ycor + my-current-y + dy * random-float 5
- 
-  ;; Rimbalzo elastico sul bordo verticale
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; MARKET FORCES
+  ;;
+  ;; Market forces now modify the
+  ;; velocity instead of simply being
+  ;; added to the position.
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  set velocity-x
+    velocity-x + my-current-x
+
+  set velocity-y
+    velocity-y + my-current-y
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; BORDI
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  let next-x
+    xcor + velocity-x
+
+  let next-y
+    ycor + velocity-y
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; RIMBALZO SUL BORDO VERTICALE
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
   if next-x > max-pxcor or next-x < min-pxcor [
-    set heading (360 - heading)
-    set next-x (max (list min-pxcor (min (list max-pxcor next-x))))
+
+    set velocity-x (- velocity-x)
+
+    set next-x
+      max
+      (list
+        min-pxcor
+        (min
+          (list
+            max-pxcor
+            next-x
+          )
+        )
+      )
   ]
- 
-  ;; Rimbalzo elastico sul bordo orizzontale
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; RIMBALZO SUL BORDO ORIZZONTALE
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
   if next-y > max-pycor or next-y < min-pycor [
-    set heading (180 - heading)
-    set next-y (max (list min-pycor (min (list max-pycor next-y))))
+
+    set velocity-y (- velocity-y)
+
+    set next-y
+      max
+      (list
+        min-pycor
+        (min
+          (list
+            max-pycor
+            next-y
+          )
+        )
+      )
   ]
- 
+
+
   setxy next-x next-y
-  rt random-float (2 * temperature) - temperature
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; TEMPERATURE
+  ;;
+  ;; Randomly rotates the current
+  ;; velocity.
+  ;;
+  ;; Importantly, this changes
+  ;; direction, NOT speed.
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  let random-angle
+    random-float (2 * temperature) - temperature
+
+
+  let old-vx velocity-x
+  let old-vy velocity-y
+
+
+  set velocity-x
+    (old-vx * cos random-angle) -
+    (old-vy * sin random-angle)
+
+
+  set velocity-y
+    (old-vx * sin random-angle) +
+    (old-vy * cos random-angle)
+
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; KEEP HEADING CONSISTENT
+  ;; WITH VELOCITY
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  if velocity-x != 0 or velocity-y != 0 [
+
+    set heading
+      atan velocity-x velocity-y
+  ]
+
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; PROBABILITA' DI COMPRAVENDITA
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to-report probabilita-scambio
-  let ampiezza-x (max-pxcor - min-pxcor)
- 
+
+  let ampiezza-x
+    (max-pxcor - min-pxcor)
+
   if ampiezza-x = 0 [
     report 0
   ]
- 
-  let p ((xcor - min-pxcor) / ampiezza-x)
- 
-  report min (list 1 (max (list 0 p)))
+
+  let p
+    ((xcor - min-pxcor) / ampiezza-x)
+
+  report
+    min
+    (list
+      1
+      (max
+        (list
+          0
+          p
+        )
+      )
+    )
+
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; COMPRAVENDITA DI BITCOIN
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to compravendita-bitcoin
+
   if btc-price > 0 [
-    let p probabilita-scambio
- 
-    let quantita-acquisto min (list trade-size (floor (cash-balance / btc-price)))
-    let quantita-vendita  min (list trade-size bitcoin-held)
- 
-    ;; Acquisto nella meta' superiore del mondo
+
+    let p
+      probabilita-scambio
+
+
+    let quantita-acquisto
+      min
+      (list
+        trade-size
+        (floor (cash-balance / btc-price))
+      )
+
+
+    let quantita-vendita
+      min
+      (list
+        trade-size
+        bitcoin-held
+      )
+
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; ACQUISTO
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
     if ycor >= 0 [
-      if (random-float 1 < p) and (quantita-acquisto > 0) [
-        let costo (quantita-acquisto * btc-price)
-        set cash-balance cash-balance - costo
-        set bitcoin-held bitcoin-held + quantita-acquisto
-        set model-trading-volume model-trading-volume + quantita-acquisto
+
+      if
+        (random-float 1 < p)
+        and
+        (quantita-acquisto > 0)
+      [
+
+        let costo
+          quantita-acquisto * btc-price
+
+        set cash-balance
+          cash-balance - costo
+
+        set bitcoin-held
+          bitcoin-held + quantita-acquisto
+
+        set model-trading-volume
+          model-trading-volume +
+          quantita-acquisto
       ]
     ]
- 
-    ;; Vendita nella meta' inferiore del mondo
+
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; VENDITA
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
     if ycor < 0 [
-      if (random-float 1 < p) and (quantita-vendita > 0) [
-        let ricavo (quantita-vendita * btc-price)
-        set bitcoin-held bitcoin-held - quantita-vendita
-        set cash-balance cash-balance + ricavo
-        set model-trading-volume model-trading-volume + quantita-vendita
+
+      if
+        (random-float 1 < p)
+        and
+        (quantita-vendita > 0)
+      [
+
+        let ricavo
+          quantita-vendita * btc-price
+
+        set bitcoin-held
+          bitcoin-held - quantita-vendita
+
+        set cash-balance
+          cash-balance + ricavo
+
+        set model-trading-volume
+          model-trading-volume +
+          quantita-vendita
       ]
     ]
   ]
+
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; VOLUME DEL MODELLO IN DOLLARI
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to-report model-trading-volume-usd
-  if btc-price <= 0 [ report 0 ]
-  report model-trading-volume * btc-price
+
+  if btc-price <= 0 [
+    report 0
+  ]
+
+  report
+    model-trading-volume * btc-price
+
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; DATI SINTETICI (niente API)
+;; DATI SINTETICI
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to scarica-dati
+
   if scenario = "crash" [
-    set prices genera-crash 60000
+
+    set prices
+      genera-crash 60000
+
     stop
   ]
+
+
   if scenario = "bull-market" [
-    set prices genera-prezzi 30000 0.015 0.01
+
+    set prices
+      genera-prezzi 30000 0.015 0.01
+
     stop
   ]
+
+
   if scenario = "bear-market" [
-    set prices genera-prezzi 60000 -0.015 0.01
+
+    set prices
+      genera-prezzi 60000 -0.015 0.01
+
     stop
   ]
+
+
   if scenario = "sideways" [
-    set prices genera-prezzi 40000 0 0.005
+
+    set prices
+      genera-prezzi 40000 0 0.005
+
     stop
   ]
+
+
   if scenario = "bubble" [
-    set prices genera-bolla 30000
+
+    set prices
+      genera-bolla 30000
+
     stop
   ]
+
 end
 
-to-report genera-prezzi [prezzo-iniziale drift sigma]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GENERA PREZZI
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report genera-prezzi
+  [ prezzo-iniziale drift sigma ]
+
   let result []
   let p prezzo-iniziale
   let t 0
+
+
   while [t < num-days] [
-    let r drift + random-normal 0 sigma
-    set p p * (1 + r)
-    if p < 1 [ set p 1 ]
-    set result lput (list t p) result
-    set t t + 1
+
+    let r
+      drift + random-normal 0 sigma
+
+    set p
+      p * (1 + r)
+
+    if p < 1 [
+      set p 1
+    ]
+
+    set result
+      lput
+      (list t p)
+      result
+
+    set t
+      t + 1
   ]
+
   report result
+
 end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GENERA CRASH
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report genera-crash [prezzo-iniziale]
+
   let result []
   let p prezzo-iniziale
   let t 0
+
+
   while [t < num-days] [
+
     let r 0
+
+
     ifelse t < 100 [
-      set r random-normal 0 0.005
+
+      set r
+        random-normal 0 0.005
+
     ][
+
       ifelse t < 110 [
-        set r -0.25 + random-normal 0 0.02
+
+        set r
+          -0.25 + random-normal 0 0.02
+
       ][
-        set r random-normal 0.003 0.012
+
+        set r
+          random-normal 0.003 0.012
       ]
     ]
-    set p p * (1 + r)
-    if p < 1 [ set p 1 ]
-    set result lput (list t p) result
-    set t t + 1
+
+
+    set p
+      p * (1 + r)
+
+    if p < 1 [
+      set p 1
+    ]
+
+
+    set result
+      lput
+      (list t p)
+      result
+
+    set t
+      t + 1
   ]
+
+
   report result
+
 end
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GENERA BOLLA
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 to-report genera-bolla [prezzo-iniziale]
+
   let result []
   let p prezzo-iniziale
   let t 0
+
+
   while [t < num-days] [
+
     let r 0
+
+
     ifelse t < 100 [
-      ;; Fase di gonfiamento: drift forte, volatilita' bassa
-      ;; Gli agenti "credono" nel trend, poca incertezza
-      set r 0.025 + random-normal 0 0.008
+
+      ;; Fase di gonfiamento
+      set r
+        0.025 + random-normal 0 0.008
+
     ][
+
       ifelse t < 110 [
-        ;; Fase di euforia: drift massimo, volatilita' che inizia a salire
-        ;; Il mercato e' surriscaldato
-        set r 0.08 + random-normal 0 0.02
+
+        ;; Fase di euforia
+        set r
+          0.08 + random-normal 0 0.02
+
       ][
+
         ifelse t < 115 [
-          ;; Fase di scoppio: inversione brusca
-          ;; Tre giorni di caduta violenta
-          set r -0.3 + random-normal 0 0.025
+
+          ;; Fase di scoppio
+          set r
+            -0.3 + random-normal 0 0.025
+
         ][
-          ;; Fase post-bolla: rimbalzo debole e laterale
-          ;; Mercato disorientato, nessun trend chiaro
-          set r -0.002 + random-normal 0 0.015
+
+          ;; Fase post-bolla
+          set r
+            -0.002 + random-normal 0 0.015
         ]
       ]
     ]
-    set p p * (1 + r)
-    if p < 1 [ set p 1 ]
-    set result lput (list t p) result
-    set t t + 1
+
+
+    set p
+      p * (1 + r)
+
+    if p < 1 [
+      set p 1
+    ]
+
+
+    set result
+      lput
+      (list t p)
+      result
+
+    set t
+      t + 1
   ]
+
+
   report result
+
 end
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; AGGIORNAMENTO GIORNALIERO
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- to aggiorna-dati
-  if not is-list? prices [ stop ]
-  if day-index >= length prices [ stop ]
 
-  let p item day-index prices
-  let new-price item 1 p
+to aggiorna-dati
+
+  if not is-list? prices [
+    stop
+  ]
+
+
+  if day-index >= length prices [
+    stop
+  ]
+
+
+  let p
+    item day-index prices
+
+  let new-price
+    item 1 p
+
 
   ifelse btc-prev-price > 0 [
-    set btc-return    (new-price - btc-prev-price) / btc-prev-price
-    set btc-volatility abs btc-return
+
+    set btc-return
+      (new-price - btc-prev-price) /
+      btc-prev-price
+
+    set btc-volatility
+      abs btc-return
+
   ][
-    set btc-return    0
+
+    set btc-return 0
     set btc-volatility 0
   ]
 
-  set btc-prev-price btc-price
-  set btc-price new-price
-  set day-index day-index + 1
 
-  print (word "Giorno " day-index
-              " | prezzo=" btc-price
-              " | r(t)=" precision btc-return 4
-              " | V(t)=" precision btc-volatility 4)
+  set btc-prev-price
+    btc-price
+
+  set btc-price
+    new-price
+
+  set day-index
+    day-index + 1
+
+
+  print
+    (word
+      "Giorno "
+      day-index
+      " | prezzo="
+      btc-price
+      " | r(t)="
+      precision btc-return 4
+      " | V(t)="
+      precision btc-volatility 4
+    )
+
 end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PLOT PREZZO E VOLUME
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to aggiorna-plot-prezzi-e-volume
-  set-current-plot "Prezzo BTC (USD)"
-  set-current-plot-pen "prezzo"
-  plotxy ticks btc-price
 
-  set-current-plot "Volume modello (USD)"
-  set-current-plot-pen "modello-usd"
-  plotxy ticks model-trading-volume-usd
+  set-current-plot
+    "Prezzo BTC (USD)"
+
+  set-current-plot-pen
+    "prezzo"
+
+  plotxy
+    ticks
+    btc-price
+
+
+  set-current-plot
+    "Volume modello (USD)"
+
+  set-current-plot-pen
+    "modello-usd"
+
+  plotxy
+    ticks
+    model-trading-volume-usd
+
 end
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; PARAMETRI D'ORDINE
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to-report order-parameter
-  report order-parameter-of turtles
+
+  report
+    order-parameter-of turtles
+
 end
- 
+
+
 to-report order-parameter-a
-  report order-parameter-of agents-a
+
+  report
+    order-parameter-of agents-a
+
 end
- 
+
+
 to-report order-parameter-b
-  report order-parameter-of agents-b
+
+  report
+    order-parameter-of agents-b
+
 end
- 
+
+
 to-report order-parameter-c
-  report order-parameter-of agents-c
+
+  report
+    order-parameter-of agents-c
+
 end
- 
-to-report order-parameter-of [agenti-selezionati]
-  if count agenti-selezionati = 0 [ report 0 ]
- 
-  let sx sum [dx] of agenti-selezionati
-  let sy sum [dy] of agenti-selezionati
- 
-  report (sqrt (sx ^ 2 + sy ^ 2)) / count agenti-selezionati
+
+
+to-report order-parameter-of
+  [agenti-selezionati]
+
+  if count agenti-selezionati = 0 [
+    report 0
+  ]
+
+
+  let sx
+    sum [dx] of agenti-selezionati
+
+  let sy
+    sum [dy] of agenti-selezionati
+
+
+  report
+    (sqrt (sx ^ 2 + sy ^ 2)) /
+    count agenti-selezionati
+
 end
- 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; PLOT PARAMETRI D'ORDINE
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to aggiorna-plot-parametri
-  set-current-plot "Parametri d'ordine"
- 
-  set-current-plot-pen "globale"
-  plotxy ticks order-parameter
- 
-  set-current-plot-pen "specie-a"
-  plotxy ticks order-parameter-a
- 
-  set-current-plot-pen "specie-b"
-  plotxy ticks order-parameter-b
- 
-  set-current-plot-pen "specie-c"
-  plotxy ticks order-parameter-c
+
+  set-current-plot
+    "Parametri d'ordine"
+
+
+  set-current-plot-pen
+    "globale"
+
+  plotxy
+    ticks
+    order-parameter
+
+
+  set-current-plot-pen
+    "specie-a"
+
+  plotxy
+    ticks
+    order-parameter-a
+
+
+  set-current-plot-pen
+    "specie-b"
+
+  plotxy
+    ticks
+    order-parameter-b
+
+
+  set-current-plot-pen
+    "specie-c"
+
+  plotxy
+    ticks
+    order-parameter-c
+
 end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PORTAFOGLIO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report total-bitcoin
-  report sum [bitcoin-held] of turtles
+
+  report
+    sum [bitcoin-held] of turtles
+
 end
+
 
 to-report total-cash
-  report sum [cash-balance] of turtles
+
+  report
+    sum [cash-balance] of turtles
+
 end
+
 
 to-report total-wealth
-  if btc-price <= 0 [ report total-cash ]
-  report total-cash + (total-bitcoin * btc-price)
+
+  if btc-price <= 0 [
+    report total-cash
+  ]
+
+
+  report
+    total-cash +
+    (total-bitcoin * btc-price)
+
 end
+
 
 to-report bitcoin-a
-  report sum [bitcoin-held] of agents-a
+
+  report
+    sum [bitcoin-held] of agents-a
+
 end
+
 
 to-report bitcoin-b
-  report sum [bitcoin-held] of agents-b
+
+  report
+    sum [bitcoin-held] of agents-b
+
 end
+
 
 to-report bitcoin-c
-  report sum [bitcoin-held] of agents-c
+
+  report
+    sum [bitcoin-held] of agents-c
+
 end
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; FLOCKING (solo intra-specie)
+;; FLOCKING / AVERAGE DIRECTION
+;;
+;; IMPORTANT:
+;;
+;; Gli agenti NON fanno la media delle
+;; proprie velocita'.
+;;
+;; Fanno la media delle DIREZIONI.
+;;
+;; La velocita' / velocita' individuale
+;; viene quindi preservata.
+;;
+;; stubbornness:
+;;
+;; 0 -> segue completamente i vicini
+;;
+;; 1 -> ignora completamente i vicini
+;;
+;; valori intermedi -> compromesso
+;;
+;; La rete e' FISSA:
+;; flockmates viene assegnato durante
+;; SETUP e non viene piu' modificato.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to flock
-  if breed = agents-a [
-    set flockmates other agents-a in-radius vision
-  ]
- 
-  if breed = agents-b [
-    set flockmates other agents-b in-radius vision
-  ]
- 
-  if breed = agents-c [
-    set flockmates other agents-c in-radius vision
-  ]
- 
+
   if any? flockmates [
-    set heading average-flockmate-heading
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; DIREZIONE PROPRIA
+    ;;
+    ;; Convertiamo la direzione in un
+    ;; vettore unitario.
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    let my-dx
+      cos heading
+
+    let my-dy
+      sin heading
+
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; DIREZIONE MEDIA DEI VICINI
+    ;;
+    ;; Anche qui usiamo vettori unitari.
+    ;;
+    ;; Questo evita il problema:
+    ;;
+    ;; 359° + 1°
+    ;;
+    ;; che deve dare circa 0°, non 180°.
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    let average-dx
+      mean [cos heading] of flockmates
+
+    let average-dy
+      mean [sin heading] of flockmates
+
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; COMBINAZIONE PESATA
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    let weighted-dx
+      (stubbornness * my-dx) +
+      ((1 - stubbornness) * average-dx)
+
+
+    let weighted-dy
+      (stubbornness * my-dy) +
+      ((1 - stubbornness) * average-dy)
+
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; CAMBIO DI DIREZIONE
+    ;;
+    ;; Se i vettori si cancellano
+    ;; completamente, non facciamo
+    ;; nulla e manteniamo la direzione.
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    if weighted-dx != 0 or weighted-dy != 0 [
+
+      set heading
+        atan weighted-dx weighted-dy
+    ]
+
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; PRESERVIAMO LA VELOCITA'
+    ;;
+    ;; La direzione cambia.
+    ;; La magnitudine della velocita'
+    ;; rimane quella precedente.
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    let speed
+      sqrt
+      (
+        velocity-x ^ 2 +
+        velocity-y ^ 2
+      )
+
+
+    if speed > 0 [
+
+      set velocity-x
+        speed * cos heading
+
+      set velocity-y
+        speed * sin heading
+    ]
   ]
+
 end
- 
-to-report average-flockmate-heading
-  let x sum [dx] of flockmates
-  let y sum [dy] of flockmates
- 
-  ifelse x = 0 and y = 0 [
-    report heading
-  ][
-    report atan x y
-  ]
-end
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; REPULSIONE TRA SPECIE DIVERSE
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
- 
+
 to repel-different-breeds
-  let my-breed breed
- 
-  let vicini-diversi other turtles in-radius repulsion-radius
+
+  let my-breed
+    breed
+
+
+  let vicini-diversi
+    other turtles
+    in-radius repulsion-radius
     with [ breed != my-breed ]
- 
+
+
   if any? vicini-diversi [
-    let rx sum [
-      ([xcor] of myself - xcor) / ((distance myself) ^ 2 + 0.01)
-    ] of vicini-diversi
- 
-    let ry sum [
-      ([ycor] of myself - ycor) / ((distance myself) ^ 2 + 0.01)
-    ] of vicini-diversi
- 
+
+    let rx
+      sum
+      [
+        ([xcor] of myself - xcor) /
+        ((distance myself) ^ 2 + 0.01)
+      ]
+      of vicini-diversi
+
+
+    let ry
+      sum
+      [
+        ([ycor] of myself - ycor) /
+        ((distance myself) ^ 2 + 0.01)
+      ]
+      of vicini-diversi
+
+
     if not (rx = 0 and ry = 0) [
-      set heading atan rx ry
+
+      set heading
+        atan rx ry
+
       fd repulsion-strength
     ]
   ]
+
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; METRICHE DI STABILITA' / ASSORBIMENTO
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; --- MEDIE DI POSIZIONE Y PER BREED ---
-;; (servono per la correlazione di fase trend follower / contrarian)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; MEDIE DI POSIZIONE Y
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report mean-y-a
-  if count agents-a = 0 [ report 0 ]
-  report mean [ycor] of agents-a
+
+  if count agents-a = 0 [
+    report 0
+  ]
+
+  report
+    mean [ycor] of agents-a
+
 end
+
 
 to-report mean-y-b
-  if count agents-b = 0 [ report 0 ]
-  report mean [ycor] of agents-b
+
+  if count agents-b = 0 [
+    report 0
+  ]
+
+  report
+    mean [ycor] of agents-b
+
 end
 
-;; --- REGRESSIONE LINEARE (usata per stimare lambda) ---
-;; ys: lista di valori equispaziati nel tempo (x = 0, 1, 2, ...)
 
-to-report linear-regression-slope [ ys ]
-  let n length ys
-  if n < 2 [ report 0 ]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; REGRESSIONE LINEARE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  let xs n-values n [ i -> i ]
-  let mean-x mean xs
-  let mean-y mean ys
+to-report linear-regression-slope
+  [ ys ]
 
-  let num sum (map [ [x y] -> (x - mean-x) * (y - mean-y) ] xs ys)
-  let den sum (map [ x -> (x - mean-x) ^ 2 ] xs)
+  let n
+    length ys
 
-  if den = 0 [ report 0 ]
-  report num / den
+
+  if n < 2 [
+    report 0
+  ]
+
+
+  let xs
+    n-values n [ i -> i ]
+
+
+  let mean-x
+    mean xs
+
+  let mean-y
+    mean ys
+
+
+  let num
+    sum
+    (
+      map
+      [ [x y] ->
+        (x - mean-x) *
+        (y - mean-y)
+      ]
+      xs
+      ys
+    )
+
+
+  let den
+    sum
+    (
+      map
+      [ x ->
+        (x - mean-x) ^ 2
+      ]
+      xs
+    )
+
+
+  if den = 0 [
+    report 0
+  ]
+
+
+  report
+    num / den
+
 end
 
-;; --- CORRELAZIONE DI PEARSON (usata per la correlazione di fase A-B) ---
 
-to-report pearson-correlation [ xs ys ]
-  let n length xs
-  if n < 2 [ report 0 ]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CORRELAZIONE DI PEARSON
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  let mean-x mean xs
-  let mean-y mean ys
+to-report pearson-correlation
+  [ xs ys ]
 
-  let cov sum (map [ [x y] -> (x - mean-x) * (y - mean-y) ] xs ys)
-  let sx sqrt sum (map [ x -> (x - mean-x) ^ 2 ] xs)
-  let sy sqrt sum (map [ y -> (y - mean-y) ^ 2 ] ys)
+  let n
+    length xs
 
-  if (sx = 0) or (sy = 0) [ report 0 ]
-  report cov / (sx * sy)
+
+  if n < 2 [
+    report 0
+  ]
+
+
+  let mean-x
+    mean xs
+
+  let mean-y
+    mean ys
+
+
+  let cov
+    sum
+    (
+      map
+      [ [x y] ->
+        (x - mean-x) *
+        (y - mean-y)
+      ]
+      xs
+      ys
+    )
+
+
+  let sx
+    sqrt
+    sum
+    (
+      map
+      [ x ->
+        (x - mean-x) ^ 2
+      ]
+      xs
+    )
+
+
+  let sy
+    sqrt
+    sum
+    (
+      map
+      [ y ->
+        (y - mean-y) ^ 2
+      ]
+      ys
+    )
+
+
+  if (sx = 0) or (sy = 0) [
+    report 0
+  ]
+
+
+  report
+    cov / (sx * sy)
+
 end
 
-;; --- INDICE DI ETEROGENEITA' (tipo Herfindahl) ---
-;; H = 1 popolazione omogenea, H = 1/3 popolazione equidistribuita
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; INDICE DI ETEROGENEITA'
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report heterogeneity-index
-  let tot population-a + population-b + population-c
-  if tot = 0 [ report 0 ]
 
-  let sa population-a / tot
-  let sb population-b / tot
-  let sc population-c / tot
+  let tot
+    population-a +
+    population-b +
+    population-c
 
-  report (sa ^ 2) + (sb ^ 2) + (sc ^ 2)
+
+  if tot = 0 [
+    report 0
+  ]
+
+
+  let sa
+    population-a / tot
+
+  let sb
+    population-b / tot
+
+  let sc
+    population-c / tot
+
+
+  report
+    (sa ^ 2) +
+    (sb ^ 2) +
+    (sc ^ 2)
+
 end
 
-;; --- AGGIORNAMENTO SERIE STORICHE E METRICHE (una chiamata per tick) ---
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; AGGIORNAMENTO METRICHE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to aggiorna-metriche-stabilita
-  ;; serie storica del parametro d'ordine globale
-  set op-history lput order-parameter op-history
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; PARAMETRO D'ORDINE
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  set op-history
+    lput
+    order-parameter
+    op-history
+
+
   if length op-history > window-size [
-    set op-history but-first op-history
+
+    set op-history
+      but-first op-history
   ]
 
-  ;; serie storiche delle posizioni medie Y di A e B
-  set ya-history lput mean-y-a ya-history
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; POSIZIONE MEDIA A
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  set ya-history
+    lput
+    mean-y-a
+    ya-history
+
+
   if length ya-history > window-size [
-    set ya-history but-first ya-history
+
+    set ya-history
+      but-first ya-history
   ]
 
-  set yb-history lput mean-y-b yb-history
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; POSIZIONE MEDIA B
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  set yb-history
+    lput
+    mean-y-b
+    yb-history
+
+
   if length yb-history > window-size [
-    set yb-history but-first yb-history
+
+    set yb-history
+      but-first yb-history
   ]
 
-  ;; lambda: pendenza della regressione su ln(order-parameter)
-  ;; lambda > 0 => regime di risonanza / amplificazione
-  ;; lambda < 0 => regime di assorbimento / smorzamento
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; LAMBDA
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
   ifelse length op-history >= window-size [
-    let log-op map [ v -> ln (v + 0.0001) ] op-history
-    set lambda-instability linear-regression-slope log-op
+
+    let log-op
+      map
+      [ v ->
+        ln (v + 0.0001)
+      ]
+      op-history
+
+
+    set lambda-instability
+      linear-regression-slope
+      log-op
+
   ][
+
     set lambda-instability 0
   ]
 
-  ;; correlazione di fase trend follower / contrarian
-  ;; vicina a -1 => damping strutturale (comportamento atteso in regime eterogeneo)
-  ;; vicina a +1 => sincronizzazione anomala
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; CORRELAZIONE A-B
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
   ifelse length ya-history >= window-size [
-    set phase-correlation-ab pearson-correlation ya-history yb-history
+
+    set phase-correlation-ab
+      pearson-correlation
+      ya-history
+      yb-history
+
   ][
+
     set phase-correlation-ab 0
   ]
 
-  set heterogeneity-index-value heterogeneity-index
+
+  set heterogeneity-index-value
+    heterogeneity-index
+
 end
 
-;; --- PLOT DELLE NUOVE METRICHE ---
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PLOT STABILITA'
+;;
+;; TEMPORANEAMENTE DISABILITATO
+;;
+;; I plot non sono presenti
+;; nell'interfaccia.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to aggiorna-plot-stabilita
-  set-current-plot "Instabilita (lambda)"
-  set-current-plot-pen "lambda"
-  plotxy ticks lambda-instability
 
-  set-current-plot "Correlazione di fase A-B"
-  set-current-plot-pen "corr-ab"
-  plotxy ticks phase-correlation-ab
-end]]></code>
+  ;; set-current-plot
+  ;;   "Instabilita (lambda)"
+
+  ;; set-current-plot-pen
+  ;;   "lambda"
+
+  ;; plotxy
+  ;;   ticks
+  ;;   lambda-instability
+
+
+  ;; set-current-plot
+  ;;   "Correlazione di fase A-B"
+
+  ;; set-current-plot-pen
+  ;;   "corr-ab"
+
+  ;; plotxy
+  ;;   ticks
+  ;;   phase-correlation-ab
+
+end
+]]></code>
   <widgets>
     <view x="372" wrappingAllowedX="false" y="8" frameRate="144.0" minPycor="-100" height="517" showTickCounter="true" patchSize="2.55224" fontSize="10" wrappingAllowedY="false" width="517" tickCounterLabel="ticks" maxPycor="100" updateMode="0" maxPxcor="100" minPxcor="-100"></view>
     <plot x="908" autoPlotX="true" yMax="1.0" autoPlotY="true" yAxis="φ" y="12" xMin="0.0" height="175" legend="false" xMax="100.0" yMin="0.0" width="230" xAxis="tick" display="Parametro d'ordine">
@@ -666,23 +1591,24 @@ end]]></code>
     </plot>
     <button x="26" y="21" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
     <button x="94" y="21" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55">go</button>
-    <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">20.0</input>
-    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">10.0</input>
-    <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">20.0</input>
-    <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">400.0</input>
-    <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">0.0</input>
-    <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">0.0</input>
+    <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">50.0</input>
+    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">40.0</input>
+    <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">5.0</input>
+    <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">1000.0</input>
+    <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">500.0</input>
+    <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">500.0</input>
     <input x="24" multiline="false" y="370" height="60" variable="repulsion-radius" type="number" width="156" sizeVersion="0">2.0</input>
-    <input x="187" multiline="false" y="370" height="60" variable="repulsion-strength" type="number" width="156" sizeVersion="0">5.0</input>
+    <input x="187" multiline="false" y="370" height="60" variable="repulsion-strength" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="22" multiline="false" y="469" height="60" variable="trade-interval" type="number" width="156" sizeVersion="0">5.0</input>
     <input x="185" multiline="false" y="470" height="60" variable="h" type="number" width="156" sizeVersion="0">2.0</input>
     <input x="20" multiline="false" y="538" height="60" variable="trade-size" type="number" width="156" sizeVersion="0">5000.0</input>
-    <chooser x="372" y="535" height="60" variable="scenario" current="0" width="100" display="scenario">
+    <chooser x="372" y="535" height="60" variable="scenario" current="2" width="100" display="scenario">
       <choice type="string" value="bull-market"></choice>
       <choice type="string" value="bear-market"></choice>
       <choice type="string" value="crash"></choice>
       <choice type="string" value="sideways"></choice>
       <choice type="string" value="bubble"></choice>
+      <choice type="string" value="API"></choice>
     </chooser>
     <input x="373" multiline="false" y="607" height="60" variable="num-days" type="number" width="100">10000.0</input>
     <monitor x="789" precision="17" y="535" height="60" fontSize="11" width="100" display="Total BTC">total-bitcoin</monitor>
@@ -696,7 +1622,6 @@ end]]></code>
     <note x="24" y="264" backgroundDark="0" fontSize="12" width="150" markdown="false" height="29" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(fundamental)</note>
     <note x="283" y="474" backgroundDark="0" fontSize="12" width="150" markdown="false" height="29" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(trend)</note>
     <note x="255" y="142" backgroundDark="0" fontSize="12" width="150" markdown="false" height="29" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(exo current)</note>
-    <input x="190" multiline="false" y="69" height="60" variable="vision" type="number" width="156" sizeVersion="0">3.0</input>
     <plot x="902" autoPlotX="true" yMax="0.1" autoPlotY="true" yAxis="V(t)" y="396" xMin="0.0" height="175" legend="false" xMax="100.0" yMin="0.0" width="230" xAxis="tick" display="volatilità BTC">
       <setup></setup>
       <update></update>
@@ -736,6 +1661,8 @@ end]]></code>
         <update>plot lambda</update>
       </pen>
     </plot>
+    <slider x="192" step="1" y="71" max="100" width="155" display="number-of-followers" height="56" min="0" direction="Horizontal" default="12.0" variable="number-of-followers"></slider>
+    <slider x="190" step="0.001" y="11" max="1" width="159" display="stubbornness" height="50" min="0" direction="Horizontal" default="0.878" variable="stubbornness"></slider>
   </widgets>
   <info>## WHAT IS IT?
 
