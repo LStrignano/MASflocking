@@ -10,6 +10,8 @@ globals [
   prices
   day-index
   btc-price
+  btc-initial-price    ;; Prezzo iniziale P_0 per calcolo Hype
+  btc-ath-price        ;; Prezzo massimo storico P_ATH
   btc-prev-price
   btc-return
   btc-volatility
@@ -80,6 +82,8 @@ to setup
 
   set day-index 0
   set btc-prev-price 0
+  set btc-initial-price 0
+  set btc-ath-price 0
   set btc-return 0
   set btc-volatility 0
   set model-trading-volume 0
@@ -114,7 +118,7 @@ to setup
 
   create-agents-a population-a [
     set color yellow
-    set size 2
+    set size 10
     posiziona-al-centro
     set heading random 360
 
@@ -131,7 +135,7 @@ to setup
 
   create-agents-b population-b [
     set color red
-    set size 2
+    set size 10
     posiziona-al-centro
     set heading random 360
 
@@ -148,7 +152,7 @@ to setup
 
   create-agents-c population-c [
     set color cyan
-    set size 2
+    set size 10
     posiziona-al-centro
     set heading random 360
 
@@ -300,6 +304,25 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CALCOLO FATTORE DI HYPE CON ISTERESI (P_ATH)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report hype-factor
+  if btc-initial-price <= 0 [ report 1 ]
+
+  let ratio-attuale (btc-price / btc-initial-price)
+  let ratio-ath (btc-ath-price / btc-initial-price)
+
+  ;; Parametro beta (ritenzione dell'adozione post-picco, es. 35%)
+  let beta 0.35
+
+  let hype-con-memoria ratio-attuale + (beta * (ratio-ath - ratio-attuale))
+
+  report max (list 0.05 hype-con-memoria)
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; COMPRAVENDITA DI BITCOIN
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -312,12 +335,15 @@ to compravendita-bitcoin
     let quantita-acquisto min (list trade-size (floor (cash-balance / btc-price)))
     let quantita-vendita min (list trade-size bitcoin-held)
 
+    let h-factor hype-factor  ;; Recuperiamo il moltiplicatore dinamico con memoria
+
     if ycor >= 0 [
       if (random-float 1 < p) and (quantita-acquisto > 0) [
         let costo quantita-acquisto * btc-price
         set cash-balance cash-balance - costo
         set bitcoin-held bitcoin-held + quantita-acquisto
-        set model-trading-volume model-trading-volume + quantita-acquisto
+
+        set model-trading-volume model-trading-volume + (quantita-acquisto * h-factor)
       ]
     ]
 
@@ -326,7 +352,8 @@ to compravendita-bitcoin
         let ricavo quantita-vendita * btc-price
         set bitcoin-held bitcoin-held - quantita-vendita
         set cash-balance cash-balance + ricavo
-        set model-trading-volume model-trading-volume + quantita-vendita
+
+        set model-trading-volume model-trading-volume + (quantita-vendita * h-factor)
       ]
     ]
   ]
@@ -354,17 +381,17 @@ end
 to carica-dati-da-csv [ nome-file ]
   set prices []
   file-close-all
-  
+
   carefully [
     let dati csv:from-file nome-file
-    
+
     if length dati > 0 [
       let prima-riga item 0 dati
       if not is-number? item 1 prima-riga [
         set dati but-first dati
       ]
     ]
-    
+
     let t 0
     foreach dati [ riga ->
       if length riga >= 2 [
@@ -381,7 +408,7 @@ to carica-dati-da-csv [ nome-file ]
         ]
       ]
     ]
-    
+
     print (word "CSV caricato con successo! Estratti " length prices " record storici validi.")
   ] [
     file-close-all
@@ -600,9 +627,21 @@ to aggiorna-dati
 
   set btc-prev-price btc-price
   set btc-price new-price
+
+  ;; Registriamo P_0 e P_ATH al primissimo giorno valido
+  if btc-initial-price = 0 and btc-price > 0 [
+    set btc-initial-price btc-price
+    set btc-ath-price btc-price
+  ]
+
+  ;; Tracciamo costantemente il massimo storico
+  if btc-price > btc-ath-price [
+    set btc-ath-price btc-price
+  ]
+
   set day-index day-index + 1
 
-  print (word "Giorno " day-index " | Prezzo=" btc-price " | Vol Reale=" real-trading-volume-usd)
+  print (word "Giorno " day-index " | Prezzo=" btc-price " | ATH=" btc-ath-price " | Hype=" precision hype-factor 2 " | Vol Reale=" real-trading-volume-usd)
 
 end
 
@@ -644,11 +683,9 @@ to aggiorna-plot-correlazione-volumi
 
   set-current-plot "Correlazione Volumi (Pearson r)"
 
-  ;; 1. Traccia la linea di riferimento dello ZERO
   set-current-plot-pen "zero"
   plotxy ticks 0
 
-  ;; 2. Traccia la curva del coefficiente di correlazione reale
   if real-trading-volume-usd > 0 [
     set-current-plot-pen "correlazione"
     plotxy ticks volume-correlation
@@ -663,14 +700,12 @@ end
 
 to aggiorna-plot-prezzi-e-volume
 
-  ;; 1. Plot Prezzo
   set-current-plot "Prezzo BTC (USD)"
   set-current-plot-pen "prezzo"
   plotxy ticks btc-price
 
-  ;; 2. Plot Volume (Modello vs Reale)
   set-current-plot "Volume BTC (USD)"
-  
+
   set-current-plot-pen "modello-usd"
   plotxy ticks model-trading-volume-usd
 
@@ -942,7 +977,7 @@ to aggiorna-plot-stabilita
   ;; Disponibile per i plot di stabilità se necessari
 end]]></code>
   <widgets>
-    <view x="372" wrappingAllowedX="false" y="8" frameRate="144.0" minPycor="-100" height="517" showTickCounter="true" patchSize="2.55224" fontSize="10" wrappingAllowedY="false" width="517" tickCounterLabel="ticks" maxPycor="100" updateMode="0" maxPxcor="100" minPxcor="-100"></view>
+    <view x="362" wrappingAllowedX="false" y="0" frameRate="144.0" minPycor="-1000" height="529" showTickCounter="true" patchSize="0.2624" fontSize="10" wrappingAllowedY="false" width="529" tickCounterLabel="ticks" maxPycor="1000" updateMode="0" maxPxcor="1000" minPxcor="-1000"></view>
     <plot x="908" autoPlotX="true" yMax="1.0" autoPlotY="true" yAxis="φ" y="12" xMin="0.0" height="175" legend="false" xMax="100.0" yMin="0.0" width="230" xAxis="tick" display="Parametro d'ordine">
       <setup></setup>
       <update></update>
@@ -973,9 +1008,9 @@ end]]></code>
     </plot>
     <button x="26" y="21" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
     <button x="94" y="21" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55">go</button>
-    <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">50.0</input>
-    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">15.0</input>
-    <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">25.0</input>
+    <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">500.0</input>
+    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">40.0</input>
+    <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">1.0</input>
     <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">1000.0</input>
     <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">0.0</input>
@@ -1033,8 +1068,6 @@ end]]></code>
         <update>plot order-parameter-c</update>
       </pen>
     </plot>
-    <note x="579" y="92" backgroundDark="0" fontSize="60" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">buy</note>
-    <note x="583" y="353" backgroundDark="0" fontSize="55" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">sell</note>
     <slider x="195" step="1" y="282" max="100" width="151" display="window-size" height="50" min="5" direction="Horizontal" default="20.0" variable="window-size"></slider>
     <plot x="910" autoPlotX="true" yMax="1.0" autoPlotY="false" y="591" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="-1.0" width="230" display="Correlazione Volumi (Pearson r)">
       <setup></setup>
@@ -1048,8 +1081,10 @@ end]]></code>
         <update>plot zero</update>
       </pen>
     </plot>
-    <slider x="192" step="1" y="71" max="100" width="155" display="number-of-followers" height="56" min="0" direction="Horizontal" default="7.0" variable="number-of-followers"></slider>
-    <slider x="190" step="0.001" y="11" max="1" width="159" display="stubbornness" height="50" min="0" direction="Horizontal" default="0.855" variable="stubbornness"></slider>
+    <slider x="192" step="1" y="71" max="100" width="155" display="number-of-followers" height="56" min="0" direction="Horizontal" default="12.0" variable="number-of-followers"></slider>
+    <slider x="190" step="0.001" y="11" max="1" width="159" display="stubbornness" height="50" min="0" direction="Horizontal" default="1.0" variable="stubbornness"></slider>
+    <note x="582" y="53" backgroundDark="0" fontSize="60" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">buy</note>
+    <note x="600" y="282" backgroundDark="0" fontSize="55" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">sell</note>
   </widgets>
   <info>## WHAT IS IT?
 
