@@ -18,6 +18,11 @@ globals [
   model-trading-volume
   real-trading-volume-usd
 
+  ;; VARIABILI PER SCALING E ISTERESI VOLUMI IN USCITA
+  real-volume-initial       ;; Volume iniziale V_0
+  real-volume-ath           ;; Volume massimo storico V_ATH
+  volume-hysteresis-state   ;; Stato corrente dell'isteresi di volume
+
   ;; STORICO E CALCOLO CORRELAZIONE VOLUMI (PEARSON r)
   model-volume-history
   real-volume-history
@@ -88,6 +93,9 @@ to setup
   set btc-volatility 0
   set model-trading-volume 0
   set real-trading-volume-usd 0
+  set real-volume-initial 0
+  set real-volume-ath 0
+  set volume-hysteresis-state 0
   set volume-correlation 0
   set prices []
 
@@ -304,26 +312,7 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CALCOLO FATTORE DI HYPE CON ISTERESI (P_ATH)
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-to-report hype-factor
-  if btc-initial-price <= 0 [ report 1 ]
-
-  let ratio-attuale (btc-price / btc-initial-price)
-  let ratio-ath (btc-ath-price / btc-initial-price)
-
-  ;; Parametro beta (ritenzione dell'adozione post-picco, es. 35%)
-  let beta 0.35
-
-  let hype-con-memoria ratio-attuale + (beta * (ratio-ath - ratio-attuale))
-
-  report max (list 0.05 hype-con-memoria)
-end
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; COMPRAVENDITA DI BITCOIN
+;; COMPRAVENDITA DI BITCOIN (GLI AGENTI OPERANO NORMALE)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to compravendita-bitcoin
@@ -335,15 +324,14 @@ to compravendita-bitcoin
     let quantita-acquisto min (list trade-size (floor (cash-balance / btc-price)))
     let quantita-vendita min (list trade-size bitcoin-held)
 
-    let h-factor hype-factor  ;; Recuperiamo il moltiplicatore dinamico con memoria
-
     if ycor >= 0 [
       if (random-float 1 < p) and (quantita-acquisto > 0) [
         let costo quantita-acquisto * btc-price
         set cash-balance cash-balance - costo
         set bitcoin-held bitcoin-held + quantita-acquisto
 
-        set model-trading-volume model-trading-volume + (quantita-acquisto * h-factor)
+        ;; Tracciamo i BTC scambiati in modo puro senza moltiplicatori
+        set model-trading-volume model-trading-volume + quantita-acquisto
       ]
     ]
 
@@ -353,7 +341,8 @@ to compravendita-bitcoin
         set bitcoin-held bitcoin-held - quantita-vendita
         set cash-balance cash-balance + ricavo
 
-        set model-trading-volume model-trading-volume + (quantita-vendita * h-factor)
+        ;; Tracciamo i BTC scambiati in modo puro senza moltiplicatori
+        set model-trading-volume model-trading-volume + quantita-vendita
       ]
     ]
   ]
@@ -362,14 +351,30 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; VOLUME DEL MODELLO IN DOLLARI
+;; FATTORE DI SCALING VOLUMI IN USCITA CON ISTERESI
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report volume-hysteresis-factor
+  if real-volume-initial <= 0 [ report 1 ]
+
+  ;; Calcola il rapporto tra il volume con memoria isteretica e il volume iniziale (V_0)
+  let hysteresis-ratio (volume-hysteresis-state / real-volume-initial)
+
+  ;; Evitiamo che il fattore vada a zero
+  report max (list 0.01 hysteresis-ratio)
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; VOLUME DEL MODELLO IN DOLLARI (SCALATO IN USCITA)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report model-trading-volume-usd
 
   if btc-price <= 0 [ report 0 ]
 
-  report model-trading-volume * btc-price
+  ;; Applichiamo lo scaling solo sul reporter di uscita
+  report (model-trading-volume * btc-price) * volume-hysteresis-factor
 
 end
 
@@ -600,7 +605,7 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; AGGIORNAMENTO GIORNALIERO
+;; AGGIORNAMENTO GIORNALIERO E ISTERESI
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to aggiorna-dati
@@ -617,6 +622,23 @@ to aggiorna-dati
     set real-trading-volume-usd 0
   ]
 
+  ;; Registrazione V_0 iniziale
+  if real-volume-initial = 0 and real-trading-volume-usd > 0 [
+    set real-volume-initial real-trading-volume-usd
+    set real-volume-ath real-trading-volume-usd
+  ]
+
+  ;; Aggiornamento Picco Massimo Storico del Volume (V_ATH)
+  if real-trading-volume-usd > real-volume-ath [
+    set real-volume-ath real-trading-volume-usd
+  ]
+
+  ;; CALCOLO STATO ISTERESI VOLUMI:
+  ;; V_hyst = V_t + beta * (V_ATH - V_t)
+  ;; beta_vol (es. 0.30) determina quanto il mercato "ricorda" i vecchi picchi di volume
+  let beta-vol 0.30
+  set volume-hysteresis-state real-trading-volume-usd + (beta-vol * (real-volume-ath - real-trading-volume-usd))
+
   ifelse btc-prev-price > 0 [
     set btc-return (new-price - btc-prev-price) / btc-prev-price
     set btc-volatility abs btc-return
@@ -628,20 +650,18 @@ to aggiorna-dati
   set btc-prev-price btc-price
   set btc-price new-price
 
-  ;; Registriamo P_0 e P_ATH al primissimo giorno valido
   if btc-initial-price = 0 and btc-price > 0 [
     set btc-initial-price btc-price
     set btc-ath-price btc-price
   ]
 
-  ;; Tracciamo costantemente il massimo storico
   if btc-price > btc-ath-price [
     set btc-ath-price btc-price
   ]
 
   set day-index day-index + 1
 
-  print (word "Giorno " day-index " | Prezzo=" btc-price " | ATH=" btc-ath-price " | Hype=" precision hype-factor 2 " | Vol Reale=" real-trading-volume-usd)
+  print (word "Giorno " day-index " | Prezzo=" btc-price " | Hyst Factor Vol=" precision volume-hysteresis-factor 2 " | Vol Reale=" real-trading-volume-usd)
 
 end
 
@@ -1010,7 +1030,7 @@ end]]></code>
     <button x="94" y="21" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55">go</button>
     <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">500.0</input>
     <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">40.0</input>
-    <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">1.0</input>
+    <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">10.0</input>
     <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">1000.0</input>
     <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">0.0</input>
