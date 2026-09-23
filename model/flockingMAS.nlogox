@@ -9,24 +9,46 @@ breed [ agents-c agent-c ]
 globals [
   prices
   day-index
+  
+  ;; DATI REALI (STARTER PER LA CORRENTE)
   btc-price
-  btc-initial-price    ;; Prezzo iniziale P_0 per calcolo Hype
-  btc-ath-price        ;; Prezzo massimo storico P_ATH
+  btc-initial-price
+  btc-ath-price
   btc-prev-price
   btc-return
   btc-volatility
+
+  ;; PREZZO E VOLATILITA' STIMATI (ENDOGENI)
+  model-price
+  model-return
+  model-volatility
   model-trading-volume
   real-trading-volume-usd
+  
+  ;; PARAMETRI CORRENTE STARTER E SWITCH DINAMICO
+  current-disabled?
+  ;; pearson-threshold viene gestito dallo slider nell'interfaccia
+  current-hype                  ;; Livello di stress/hype di mercato
 
-  ;; VARIABILI PER SCALING E ISTERESI VOLUMI IN USCITA
-  real-volume-initial       ;; Volume iniziale V_0
-  real-volume-ath           ;; Volume massimo storico V_ATH
-  volume-hysteresis-state   ;; Stato corrente dell'isteresi di volume
+  ;; SCALING E ISTERESI VOLUMI
+  real-volume-initial
+  real-volume-ath
+  volume-hysteresis-state
 
-  ;; STORICO E CALCOLO CORRELAZIONE VOLUMI (PEARSON r)
+  ;; STORICO E CORRELAZIONE VOLUMI (PEARSON)
   model-volume-history
   real-volume-history
   volume-correlation
+  volume-correlation-history    
+  mean-volume-correlation        
+  above-threshold-counter       ;; Conta i tick consecutivi sopra pearson-threshold
+
+  ;; STORICO E CORRELAZIONE PREZZI (PEARSON)
+  model-price-history
+  real-price-history
+  price-correlation
+  price-correlation-history
+  mean-price-correlation
 
   op-history
   ya-history
@@ -37,21 +59,30 @@ globals [
 ]
 
 turtles-own [
-  ;; Fixed social network
   flockmates
-
-  ;; Portfolio
   bitcoin-held
   cash-balance
-
-  ;; Persistent velocity
   velocity-x
   velocity-y
 ]
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; INIZIALIZZAZIONE DEL PORTAFOGLIO
+;; HELPER PER PLOT SICURI
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to assicura-penna [ nome-penna colore ]
+  carefully [
+    set-current-plot-pen nome-penna
+  ] [
+    create-temporary-plot-pen nome-penna
+    set-plot-pen-color colore
+  ]
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; INIZIALIZZAZIONE PORTAFOGLIO
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to inizializza-portafoglio
@@ -84,21 +115,51 @@ to setup
   carefully [
     import-drawing "grafico_buy_sell.png"
   ] [ ]
+  
+  ;; GARANZIA SOGLIA PEARSON VALIDA DA SLIDER
+  if not is-number? pearson-threshold [
+    set pearson-threshold 0.5
+  ]
+
+  set current-disabled? false    ;; Inizia sempre in Fase 1
+  set current-hype 0
+  
+  if is-number? price-sensitivity = false [
+    set price-sensitivity 0.01
+  ]
 
   set day-index 0
   set btc-prev-price 0
+  set btc-price 0
   set btc-initial-price 0
   set btc-ath-price 0
   set btc-return 0
   set btc-volatility 0
+  
+  set model-price 0
+  set model-return 0
+  set model-volatility 0
+
   set model-trading-volume 0
   set real-trading-volume-usd 0
   set real-volume-initial 0
   set real-volume-ath 0
   set volume-hysteresis-state 0
+  
+  ;; INIZIALIZZAZIONE CORRELAZIONE VOLUMI
   set volume-correlation 0
-  set prices []
+  set volume-correlation-history []
+  set mean-volume-correlation 0
+  set above-threshold-counter 0
 
+  ;; INIZIALIZZAZIONE CORRELAZIONE PREZZI
+  set model-price-history []
+  set real-price-history []
+  set price-correlation 0
+  set price-correlation-history []
+  set mean-price-correlation 0
+
+  set prices []
   set model-volume-history []
   set real-volume-history []
 
@@ -110,71 +171,48 @@ to setup
   set heterogeneity-index-value 0
   set phase-correlation-ab 0
 
-
   if trade-interval <= 0 [
     user-message "Attenzione: trade-interval deve essere > 0. Impostato a 1."
     set trade-interval 1
   ]
 
-
   scarica-dati
 
-
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; CREAZIONE AGENTS-A
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+  ;; CREAZIONE AGENTI
   create-agents-a population-a [
     set color yellow
     set size 10
     posiziona-al-centro
     set heading random 360
-
     set velocity-x cos heading
     set velocity-y sin heading
     set flockmates no-turtles
     inizializza-portafoglio
   ]
-
-
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; CREAZIONE AGENTS-B
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
   create-agents-b population-b [
     set color red
     set size 10
     posiziona-al-centro
     set heading random 360
-
     set velocity-x cos heading
     set velocity-y sin heading
     set flockmates no-turtles
     inizializza-portafoglio
   ]
-
-
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; CREAZIONE AGENTS-C
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
   create-agents-c population-c [
     set color cyan
     set size 10
     posiziona-al-centro
     set heading random 360
-
     set velocity-x cos heading
     set velocity-y sin heading
     set flockmates no-turtles
     inizializza-portafoglio
   ]
 
-
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; CREAZIONE DELLA RETE FISSA
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+  ;; RETE FISSA
   ask agents-a [
     let n min (list number-of-followers (count other agents-a))
     if n > 0 [ set flockmates n-of n other agents-a ]
@@ -190,18 +228,64 @@ to setup
     if n > 0 [ set flockmates n-of n other agents-c ]
   ]
 
+  ;; INIZIALIZZAZIONE PRIMO GIORNO REALE E MODELLO
+  if is-list? prices and length prices > 0 [
+    let record item 0 prices
+    set btc-price item 1 record
+    set btc-prev-price btc-price
+    set btc-initial-price btc-price
+    set btc-ath-price btc-price
+    set day-index 1
+  ]
+
+  set model-price btc-price
+  set model-return 0
+  set model-volatility 0
+
+  print (word "=== SETUP COMPLETATO ===")
+  print (word "FASE 1 ATTIVA - Switch automatico a Fase 2 quando r_medio(volumi) >= " pearson-threshold " per piu' di 5 tick consecutivi.")
+
   reset-ticks
 
 end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; GO
+;; HYPE E STUBBORNNESS DINAMICA
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report calcola-hype
+  report (abs model-return) + model-volatility
+end
+
+to-report dynamic-stubbornness
+  let base-s 0.95
+  let min-s 0.05
+  let raw-s base-s - (hype-sensitivity * current-hype)
+  report max (list min-s (min (list base-s raw-s)))
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GO (PIPELINE)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
 
   set model-trading-volume 0
+
+  ;; 1. AGGIORNAMENTO PREZZO E DATI REALI
+  if (ticks mod trade-interval = 0) [
+    
+    if ticks > 0 [
+      aggiorna-dati
+    ]
+
+    aggiorna-prezzo-modello
+  ]
+
+  ;; 2. AGGIORNAMENTO STATO E MOVIMENTO FISICO
+  set current-hype calcola-hype
 
   ask turtles [
     flock
@@ -209,46 +293,98 @@ to go
     swim
   ]
 
-  tick
-
-  aggiorna-metriche-stabilita
-
+  ;; 3. TRADING, CORRELAZIONI E PLOT
   if (ticks mod trade-interval = 0) [
-    aggiorna-dati
-
     ask turtles [
       compravendita-bitcoin
     ]
 
     aggiorna-storico-volumi
+    aggiorna-correlazione-prezzi
+    
     aggiorna-plot-prezzi-e-volume
     aggiorna-plot-correlazione-volumi
+    aggiorna-plot-correlazione-prezzi
   ]
 
+  aggiorna-metriche-stabilita
   aggiorna-plot-parametri
+
+  tick
 
 end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CORRENTE -- COMPONENTE X
+;; FUNZIONE DI STIMA DEL PREZZO MODELLO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to aggiorna-prezzo-modello
+
+  ifelse (not current-disabled?) [
+    
+    ;; FASE 1: COPIA REALE
+    set model-price btc-price
+    set model-return btc-return
+    set model-volatility btc-volatility
+
+    print (word "[FASE 1 - PREZZO REALE] Giorno: " day-index " | Correlazione Media Volumi: " precision mean-volume-correlation 2)
+
+  ] [
+
+    ;; FASE 2: PREZZO ENDOGENO
+    if count turtles > 0 [
+      let mean-y mean [ycor] of turtles
+      let max-y max-pycor
+
+      let market-pressure (mean-y / max-y)
+
+      let prev-m-price model-price
+      set model-price max (list 1 (model-price * (1 + (price-sensitivity * market-pressure))))
+
+      ifelse prev-m-price > 0 [
+        set model-return (model-price - prev-m-price) / prev-m-price
+        ;; Volatilità minima di fondo (0.005) per non azzerare le correnti
+        set model-volatility max (list 0.005 (abs model-return))
+      ] [
+        set model-return 0
+        set model-volatility 0.005
+      ]
+    ]
+
+    print (word ">>> [FASE 2 - PREZZO ENDOGENO] Giorno: " day-index " | Prezzo Stimato: " precision model-price 2)
+  ]
+
+  ;; Tracciamento continuo dell'ATH sia in Fase 1 che in Fase 2
+  if model-price > btc-ath-price [
+    set btc-ath-price model-price
+  ]
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CORRENTE -- COMPONENTE X (DINAMICA FASE 1 / FASE 2)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report my-current-x
-  report k * btc-volatility
+  let active-vol (ifelse-value (not current-disabled?) [ btc-volatility ] [ model-volatility ])
+  report k * active-vol
 end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CORRENTE -- COMPONENTE Y
+;; CORRENTE -- COMPONENTE Y (DINAMICA FASE 1 / FASE 2)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report my-current-y
+  let active-ret (ifelse-value (not current-disabled?) [ btc-return ] [ model-return ])
+
   ifelse breed = agents-a [
-    report h * btc-return
+    report h * active-ret
   ] [
     ifelse breed = agents-b [
-      report (- h * btc-return)
+      report (- h * active-ret)
     ] [
       report 0
     ]
@@ -312,36 +448,36 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; COMPRAVENDITA DI BITCOIN (GLI AGENTI OPERANO NORMALE)
+;; COMPRAVENDITA DI BITCOIN
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to compravendita-bitcoin
 
-  if btc-price > 0 [
+  let current-p model-price
+
+  if current-p > 0 [
 
     let p probabilita-scambio
 
-    let quantita-acquisto min (list trade-size (floor (cash-balance / btc-price)))
+    let quantita-acquisto min (list trade-size (floor (cash-balance / current-p)))
     let quantita-vendita min (list trade-size bitcoin-held)
 
     if ycor >= 0 [
       if (random-float 1 < p) and (quantita-acquisto > 0) [
-        let costo quantita-acquisto * btc-price
+        let costo quantita-acquisto * current-p
         set cash-balance cash-balance - costo
         set bitcoin-held bitcoin-held + quantita-acquisto
 
-        ;; Tracciamo i BTC scambiati in modo puro senza moltiplicatori
         set model-trading-volume model-trading-volume + quantita-acquisto
       ]
     ]
 
     if ycor < 0 [
       if (random-float 1 < p) and (quantita-vendita > 0) [
-        let ricavo quantita-vendita * btc-price
+        let ricavo quantita-vendita * current-p
         set bitcoin-held bitcoin-held - quantita-vendita
         set cash-balance cash-balance + ricavo
 
-        ;; Tracciamo i BTC scambiati in modo puro senza moltiplicatori
         set model-trading-volume model-trading-volume + quantita-vendita
       ]
     ]
@@ -351,30 +487,36 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; FATTORE DI SCALING VOLUMI IN USCITA CON ISTERESI
+;; FATTORE DI SCALING VOLUMI (UNIFICATO BASATO SU PREZZO)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report volume-hysteresis-factor
-  if real-volume-initial <= 0 [ report 1 ]
 
-  ;; Calcola il rapporto tra il volume con memoria isteretica e il volume iniziale (V_0)
-  let hysteresis-ratio (volume-hysteresis-state / real-volume-initial)
+  let initial-p max (list 1 btc-initial-price)
+  let current-p max (list 1 model-price)
+  let ath-p     max (list current-p btc-ath-price)
 
-  ;; Evitiamo che il fattore vada a zero
-  report max (list 0.01 hysteresis-ratio)
+  let ratio-current (current-p / initial-p)
+  let ratio-ath     (ath-p / initial-p)
+
+  ;; Formula continua dell'isteresi valida sia in Fase 1 che in Fase 2
+  let price-hysteresis-state ratio-current + (beta-vol * (ratio-ath - ratio-current))
+
+  report max (list 0.01 price-hysteresis-state)
+
 end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; VOLUME DEL MODELLO IN DOLLARI (SCALATO IN USCITA)
+;; VOLUME DEL MODELLO IN DOLLARI
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report model-trading-volume-usd
 
-  if btc-price <= 0 [ report 0 ]
-
-  ;; Applichiamo lo scaling solo sul reporter di uscita
-  report (model-trading-volume * btc-price) * volume-hysteresis-factor
+  let current-p model-price
+  if current-p <= 0 [ report 0 ]
+  
+  report (model-trading-volume * current-p) * volume-hysteresis-factor
 
 end
 
@@ -467,7 +609,7 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; PREZZO LIVE DA API (Coinbase)
+;; PREZZO LIVE DA API
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report genera-prezzi-api
@@ -605,7 +747,7 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; AGGIORNAMENTO GIORNALIERO E ISTERESI
+;; AGGIORNAMENTO GIORNALIERO
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to aggiorna-dati
@@ -622,22 +764,14 @@ to aggiorna-dati
     set real-trading-volume-usd 0
   ]
 
-  ;; Registrazione V_0 iniziale
   if real-volume-initial = 0 and real-trading-volume-usd > 0 [
     set real-volume-initial real-trading-volume-usd
     set real-volume-ath real-trading-volume-usd
   ]
 
-  ;; Aggiornamento Picco Massimo Storico del Volume (V_ATH)
   if real-trading-volume-usd > real-volume-ath [
     set real-volume-ath real-trading-volume-usd
   ]
-
-  ;; CALCOLO STATO ISTERESI VOLUMI:
-  ;; V_hyst = V_t + beta * (V_ATH - V_t)
-  ;; beta_vol (es. 0.30) determina quanto il mercato "ricorda" i vecchi picchi di volume
-  let beta-vol 0.30
-  set volume-hysteresis-state real-trading-volume-usd + (beta-vol * (real-volume-ath - real-trading-volume-usd))
 
   ifelse btc-prev-price > 0 [
     set btc-return (new-price - btc-prev-price) / btc-prev-price
@@ -661,13 +795,11 @@ to aggiorna-dati
 
   set day-index day-index + 1
 
-  print (word "Giorno " day-index " | Prezzo=" btc-price " | Hyst Factor Vol=" precision volume-hysteresis-factor 2 " | Vol Reale=" real-trading-volume-usd)
-
 end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CALCOLO E PLOT CORRELAZIONE (PEARSON r)
+;; CALCOLO E PLOT CORRELAZIONE VOLUMI (PEARSON)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to aggiorna-storico-volumi
@@ -675,6 +807,7 @@ to aggiorna-storico-volumi
   set model-volume-history lput model-trading-volume-usd model-volume-history
   set real-volume-history lput real-trading-volume-usd real-volume-history
 
+  ;; Applicazione finestra mobile agli storici dei volumi
   if is-number? window-size and window-size > 0 [
     if length model-volume-history > window-size [
       set model-volume-history but-first model-volume-history
@@ -682,6 +815,7 @@ to aggiorna-storico-volumi
     ]
   ]
 
+  ;; Calcolo correlazione di Pearson per i volumi
   if length model-volume-history >= 2 [
     let mean-m mean model-volume-history
     let mean-r mean real-volume-history
@@ -695,44 +829,146 @@ to aggiorna-storico-volumi
     ] [
       set volume-correlation 0
     ]
+
+    ;; Applicazione finestra mobile allo storico della correlazione
+    set volume-correlation-history lput volume-correlation volume-correlation-history
+    if length volume-correlation-history > window-size [
+      set volume-correlation-history but-first volume-correlation-history
+    ]
+
+    set mean-volume-correlation mean volume-correlation-history
+  ]
+
+  ;; SWITCH AUTOMATICO: SCATTA SE mean-volume-correlation >= pearson-threshold PER PIÙ DI 5 TICK CONSECUTIVI
+  if (not current-disabled?) and (length model-volume-history >= window-size) [
+    
+    ifelse mean-volume-correlation >= pearson-threshold [
+      set above-threshold-counter above-threshold-counter + 1
+    ] [
+      set above-threshold-counter 0
+    ]
+
+    if above-threshold-counter > 5 [
+      set current-disabled? true
+      print (word "!!! REGIME RAGGIUNTO A GIORNO " day-index " !!!")
+      print (word "Correlazione media volumi (" precision mean-volume-correlation 3 ") >= " pearson-threshold " per piu' di 5 tick consecutivi.")
+      print "Passaggio a FASE 2 (Prezzo Endogeno)."
+    ]
   ]
 
 end
 
 to aggiorna-plot-correlazione-volumi
 
-  set-current-plot "Correlazione Volumi (Pearson r)"
+  carefully [
+    set-current-plot "Correlazione Volumi (Pearson r)"
 
-  set-current-plot-pen "zero"
-  plotxy ticks 0
+    assicura-penna "soglia-switch" red
+    plotxy day-index pearson-threshold
 
-  if real-trading-volume-usd > 0 [
-    set-current-plot-pen "correlazione"
-    plotxy ticks volume-correlation
-  ]
+    assicura-penna "zero" black
+    plotxy day-index 0
+
+    if real-trading-volume-usd > 0 [
+      assicura-penna "correlazione" blue
+      plotxy day-index volume-correlation
+
+      assicura-penna "correlazione-media" green
+      plotxy day-index mean-volume-correlation
+    ]
+  ] [ ]
 
 end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; PLOT PREZZO E VOLUME (MODELLO vs REALE)
+;; CALCOLO E PLOT CORRELAZIONE PREZZI (PEARSON)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to aggiorna-correlazione-prezzi
+
+  set model-price-history lput model-price model-price-history
+  set real-price-history lput btc-price real-price-history
+
+  ;; Finestra mobile sugli storici dei prezzi
+  if is-number? window-size and window-size > 0 [
+    if length model-price-history > window-size [
+      set model-price-history but-first model-price-history
+      set real-price-history but-first real-price-history
+    ]
+  ]
+
+  ;; Calcolo correlazione di Pearson per i prezzi
+  if length model-price-history >= 2 [
+    let mean-m mean model-price-history
+    let mean-r mean real-price-history
+
+    let cov sum (map [ [m r] -> (m - mean-m) * (r - mean-r) ] model-price-history real-price-history)
+    let std-m sqrt sum (map [ m -> (m - mean-m) ^ 2 ] model-price-history)
+    let std-r sqrt sum (map [ r -> (r - mean-r) ^ 2 ] real-price-history)
+
+    ifelse (std-m > 0 and std-r > 0) [
+      set price-correlation cov / (std-m * std-r)
+    ] [
+      set price-correlation 0
+    ]
+
+    ;; Finestra mobile sullo storico della correlazione
+    set price-correlation-history lput price-correlation price-correlation-history
+    if length price-correlation-history > window-size [
+      set price-correlation-history but-first price-correlation-history
+    ]
+
+    set mean-price-correlation mean price-correlation-history
+  ]
+
+end
+
+to aggiorna-plot-correlazione-prezzi
+
+  carefully [
+    set-current-plot "Correlazione Prezzi (Pearson r)"
+
+    assicura-penna "zero" black
+    plotxy day-index 0
+
+    if btc-price > 0 [
+      assicura-penna "correlazione" orange
+      plotxy day-index price-correlation
+
+      assicura-penna "correlazione-media" magenta
+      plotxy day-index mean-price-correlation
+    ]
+  ] [ ]
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PLOT PREZZO E VOLUME
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to aggiorna-plot-prezzi-e-volume
 
-  set-current-plot "Prezzo BTC (USD)"
-  set-current-plot-pen "prezzo"
-  plotxy ticks btc-price
+  carefully [
+    set-current-plot "Prezzo BTC (USD)"
+    
+    assicura-penna "prezzo-reale" blue
+    plotxy day-index btc-price
 
-  set-current-plot "Volume BTC (USD)"
+    assicura-penna "prezzo-stimato" red
+    plotxy day-index model-price
 
-  set-current-plot-pen "modello-usd"
-  plotxy ticks model-trading-volume-usd
+    set-current-plot "Volume BTC (USD)"
 
-  if real-trading-volume-usd > 0 [
-    set-current-plot-pen "reale-usd"
-    plotxy ticks real-trading-volume-usd
-  ]
+    assicura-penna "modello-usd" green
+    plotxy day-index model-trading-volume-usd
+
+    if real-trading-volume-usd > 0 [
+      assicura-penna "reale-usd" gray
+      plotxy day-index real-trading-volume-usd
+    ]
+  ] [ ]
 
 end
 
@@ -775,19 +1011,21 @@ end
 
 to aggiorna-plot-parametri
 
-  set-current-plot "Parametri d'ordine"
+  carefully [
+    set-current-plot "Parametri d'ordine"
 
-  set-current-plot-pen "globale"
-  plotxy ticks order-parameter
+    assicura-penna "globale" black
+    plotxy ticks order-parameter
 
-  set-current-plot-pen "specie-a"
-  plotxy ticks order-parameter-a
+    assicura-penna "specie-a" yellow
+    plotxy ticks order-parameter-a
 
-  set-current-plot-pen "specie-b"
-  plotxy ticks order-parameter-b
+    assicura-penna "specie-b" red
+    plotxy ticks order-parameter-b
 
-  set-current-plot-pen "specie-c"
-  plotxy ticks order-parameter-c
+    assicura-penna "specie-c" cyan
+    plotxy ticks order-parameter-c
+  ] [ ]
 
 end
 
@@ -805,8 +1043,9 @@ to-report total-cash
 end
 
 to-report total-wealth
-  if btc-price <= 0 [ report total-cash ]
-  report total-cash + (total-bitcoin * btc-price)
+  let current-p model-price
+  if current-p <= 0 [ report total-cash ]
+  report total-cash + (total-bitcoin * current-p)
 end
 
 to-report bitcoin-a
@@ -823,12 +1062,14 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; FLOCKING / AVERAGE DIRECTION
+;; FLOCKING DINAMICO
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to flock
 
   if any? flockmates [
+
+    let eff-stubbornness dynamic-stubbornness
 
     let my-dx cos heading
     let my-dy sin heading
@@ -836,8 +1077,8 @@ to flock
     let average-dx mean [cos heading] of flockmates
     let average-dy mean [sin heading] of flockmates
 
-    let weighted-dx (stubbornness * my-dx) + ((1 - stubbornness) * average-dx)
-    let weighted-dy (stubbornness * my-dy) + ((1 - stubbornness) * average-dy)
+    let weighted-dx (eff-stubbornness * my-dx) + ((1 - eff-stubbornness) * average-dx)
+    let weighted-dy (eff-stubbornness * my-dy) + ((1 - eff-stubbornness) * average-dy)
 
     if weighted-dx != 0 or weighted-dy != 0 [
       set heading atan weighted-dx weighted-dy
@@ -916,7 +1157,7 @@ end
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CORRELAZIONE DI PEARSON (USATA INTERNAMENTE)
+;; CORRELAZIONE DI PEARSON (GENERICA)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to-report pearson-correlation [ xs ys ]
@@ -988,24 +1229,10 @@ to aggiorna-metriche-stabilita
 
 end
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; PLOT STABILITA'
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 to aggiorna-plot-stabilita
-  ;; Disponibile per i plot di stabilità se necessari
 end]]></code>
   <widgets>
     <view x="362" wrappingAllowedX="false" y="0" frameRate="144.0" minPycor="-1000" height="529" showTickCounter="true" patchSize="0.2624" fontSize="10" wrappingAllowedY="false" width="529" tickCounterLabel="ticks" maxPycor="1000" updateMode="0" maxPxcor="1000" minPxcor="-1000"></view>
-    <plot x="908" autoPlotX="true" yMax="1.0" autoPlotY="true" yAxis="φ" y="12" xMin="0.0" height="175" legend="false" xMax="100.0" yMin="0.0" width="230" xAxis="tick" display="Parametro d'ordine">
-      <setup></setup>
-      <update></update>
-      <pen interval="1.0" mode="0" display="phi" color="-13840069" legend="true">
-        <setup></setup>
-        <update>plot order-parameter</update>
-      </pen>
-    </plot>
     <plot x="1161" autoPlotX="true" yMax="1.0E7" autoPlotY="true" yAxis="model-trading-volume-usd" y="20" xMin="0.0" height="337" legend="true" xMax="720.0" yMin="0.0" width="559" xAxis="Tick" display="Volume BTC (USD)">
       <setup></setup>
       <update></update>
@@ -1018,10 +1245,14 @@ end]]></code>
         <update></update>
       </pen>
     </plot>
-    <plot x="1161" autoPlotX="true" yMax="1000.0" autoPlotY="true" yAxis="btc-price" y="370" xMin="0.0" height="329" legend="false" xMax="720.0" yMin="0.0" width="562" xAxis="Tick" display="Prezzo BTC (USD)">
+    <plot x="1161" autoPlotX="true" yMax="1000.0" autoPlotY="true" yAxis="btc-price" y="370" xMin="0.0" height="329" legend="true" xMax="720.0" yMin="0.0" width="562" xAxis="Tick" display="Prezzo BTC (USD)">
       <setup></setup>
       <update></update>
-      <pen interval="1.0" mode="0" display="prezzo" color="-16777216" legend="true">
+      <pen interval="1.0" mode="0" display="prezzo-reale" color="-15390905" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="prezzo-stimato" color="-5298144" legend="true">
         <setup></setup>
         <update></update>
       </pen>
@@ -1029,13 +1260,11 @@ end]]></code>
     <button x="26" y="21" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
     <button x="94" y="21" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55">go</button>
     <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">500.0</input>
-    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">40.0</input>
+    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">20.0</input>
     <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">10.0</input>
     <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">1000.0</input>
     <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">0.0</input>
-    <input x="24" multiline="false" y="370" height="60" variable="repulsion-radius" type="number" width="156" sizeVersion="0">2.0</input>
-    <input x="187" multiline="false" y="370" height="60" variable="repulsion-strength" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="22" multiline="false" y="469" height="60" variable="trade-interval" type="number" width="156" sizeVersion="0">5.0</input>
     <input x="185" multiline="false" y="470" height="60" variable="h" type="number" width="156" sizeVersion="0">2.0</input>
     <input x="20" multiline="false" y="538" height="60" variable="trade-size" type="number" width="156" sizeVersion="0">5000.0</input>
@@ -1060,15 +1289,19 @@ end]]></code>
     <note x="24" y="264" backgroundDark="0" fontSize="12" width="150" markdown="false" height="29" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(fundamental)</note>
     <note x="283" y="474" backgroundDark="0" fontSize="12" width="150" markdown="false" height="29" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(trend)</note>
     <note x="255" y="142" backgroundDark="0" fontSize="12" width="150" markdown="false" height="29" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(exo current)</note>
-    <plot x="902" autoPlotX="true" yMax="0.1" autoPlotY="true" yAxis="V(t)" y="396" xMin="0.0" height="175" legend="false" xMax="100.0" yMin="0.0" width="230" xAxis="tick" display="volatilità BTC">
-      <setup></setup>
-      <update></update>
-      <pen interval="1.0" mode="0" display="volatility" color="-2674135" legend="true">
-        <setup></setup>
-        <update>plot btc-volatility</update>
-      </pen>
-    </plot>
-    <plot x="906" autoPlotX="true" yMax="1.0" autoPlotY="true" yAxis="\phi" y="209" xMin="0.0" height="175" legend="false" xMax="120.0" yMin="0.0" width="230" xAxis="tick" display="Parametri d'ordine">
+    <slider x="195" step="1" y="282" max="100" width="151" display="window-size" height="50" min="5" direction="Horizontal" default="53.0" variable="window-size"></slider>
+    <slider x="192" step="1" y="71" max="100" width="155" display="number-of-followers" height="56" min="0" direction="Horizontal" default="12.0" variable="number-of-followers"></slider>
+    <note x="582" y="53" backgroundDark="0" fontSize="60" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">buy</note>
+    <note x="600" y="282" backgroundDark="0" fontSize="55" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">sell</note>
+    <slider x="22" step="0.1" y="682" max="5" width="250" display="hype-sensitivity" height="50" min="0" direction="Horizontal" default="0.5" variable="hype-sensitivity"></slider>
+    <input x="28" multiline="false" y="338" height="60" variable="repulsion-radius" type="number" width="156" sizeVersion="0">2.0</input>
+    <input x="191" multiline="false" y="335" height="60" variable="repulsion-strength" type="number" width="156" sizeVersion="0">0.0</input>
+    <slider x="26" step="0.001" y="403" max="1" width="154" display="base-stubbornness" height="50" min="0" direction="Horizontal" default="0.916" variable="base-stubbornness"></slider>
+    <slider x="188" step="0.01" y="401" max="1" width="155" display="min-stubbornness" height="50" min="0" direction="Horizontal" default="0.54" variable="min-stubbornness"></slider>
+    <slider x="23" step="0.01" y="622" max="1" width="250" display="pearson-threshold" height="50" min="0" direction="Horizontal" default="0.51" variable="pearson-threshold"></slider>
+    <slider x="316" step="0.001" y="695" max="0.5" width="250" display="price-sensitivity" height="50" min="0.001" direction="Horizontal" default="0.235" variable="price-sensitivity"></slider>
+    <slider x="566" step="0.01" y="696" max="1" width="250" display="beta-vol" height="50" min="0" direction="Horizontal" default="0.27" variable="beta-vol"></slider>
+    <plot x="912" autoPlotX="true" yMax="1.0" autoPlotY="true" yAxis="\phi" y="13" xMin="0.0" height="175" legend="false" xMax="120.0" yMin="0.0" width="230" xAxis="tick" display="Parametri d'ordine">
       <setup></setup>
       <update></update>
       <pen interval="1.0" mode="0" display="globale" color="-16777216" legend="true">
@@ -1088,8 +1321,15 @@ end]]></code>
         <update>plot order-parameter-c</update>
       </pen>
     </plot>
-    <slider x="195" step="1" y="282" max="100" width="151" display="window-size" height="50" min="5" direction="Horizontal" default="20.0" variable="window-size"></slider>
-    <plot x="910" autoPlotX="true" yMax="1.0" autoPlotY="false" y="591" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="-1.0" width="230" display="Correlazione Volumi (Pearson r)">
+    <plot x="913" autoPlotX="true" yMax="0.1" autoPlotY="true" yAxis="V(t)" y="197" xMin="0.0" height="175" legend="false" xMax="100.0" yMin="0.0" width="230" xAxis="tick" display="volatilità BTC">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="volatility" color="-2674135" legend="true">
+        <setup></setup>
+        <update>plot btc-volatility</update>
+      </pen>
+    </plot>
+    <plot x="915" autoPlotX="true" yMax="1.0" autoPlotY="false" y="383" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="-1.0" width="230" display="Correlazione Volumi (Pearson r)">
       <setup></setup>
       <update></update>
       <pen interval="1.0" mode="0" display="correlazione" color="-16777216" legend="true">
@@ -1100,11 +1340,27 @@ end]]></code>
         <setup></setup>
         <update>plot zero</update>
       </pen>
+      <pen interval="1.0" mode="0" display="correlazione-media" color="-14439633" legend="true">
+        <setup></setup>
+        <update>plot correlazione-media</update>
+      </pen>
+      <pen interval="1.0" mode="0" display="pearson-threshold" color="-5298144" legend="true">
+        <setup></setup>
+        <update>plot pearson-threshold</update>
+      </pen>
     </plot>
-    <slider x="192" step="1" y="71" max="100" width="155" display="number-of-followers" height="56" min="0" direction="Horizontal" default="12.0" variable="number-of-followers"></slider>
-    <slider x="190" step="0.001" y="11" max="1" width="159" display="stubbornness" height="50" min="0" direction="Horizontal" default="1.0" variable="stubbornness"></slider>
-    <note x="582" y="53" backgroundDark="0" fontSize="60" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">buy</note>
-    <note x="600" y="282" backgroundDark="0" fontSize="55" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">sell</note>
+    <plot x="916" autoPlotX="true" yMax="1.0" autoPlotY="false" y="568" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="-1.0" width="230" display="Correlazione prezzi BTC">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="price-correlation" color="-16777216" legend="true">
+        <setup></setup>
+        <update>plot price-correlation</update>
+      </pen>
+      <pen interval="1.0" mode="0" display="mean-price-correlation" color="-15040220" legend="true">
+        <setup></setup>
+        <update>plot mean-price-correlation</update>
+      </pen>
+    </plot>
   </widgets>
   <info>## WHAT IS IT?
 
