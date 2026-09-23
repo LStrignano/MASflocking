@@ -299,6 +299,13 @@ to go
       compravendita-bitcoin
     ]
 
+    ;; --- NUOVO: TRACCIAMENTO CONTINUO ATH VOLUME ENDOGENO ---
+    let current-raw-usd (model-trading-volume * model-price)
+    if current-raw-usd > real-volume-ath [
+      set real-volume-ath current-raw-usd
+    ]
+    ;; --------------------------------------------------------
+
     aggiorna-storico-volumi
     aggiorna-correlazione-prezzi
     
@@ -306,9 +313,6 @@ to go
     aggiorna-plot-correlazione-volumi
     aggiorna-plot-correlazione-prezzi
   ]
-
-  aggiorna-metriche-stabilita
-  aggiorna-plot-parametri
 
   tick
 
@@ -506,6 +510,24 @@ to-report volume-hysteresis-factor
 
 end
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; FATTORE DI ISTERESI SUI VOLUMI 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report true-volume-hysteresis-factor
+  let initial-v max (list 1 real-volume-initial)
+  let current-v max (list 1 (model-trading-volume * model-price))
+  let ath-v     max (list current-v real-volume-ath)
+
+  let ratio-current (current-v / initial-v)
+  let ratio-ath     (ath-v / initial-v)
+
+  ;; Formula continua dell'isteresi basata sullo storico dei volumi (usa slider gamma-vol)
+  let vol-hysteresis-state ratio-current + (gamma-vol * (ratio-ath - ratio-current))
+
+  report max (list 0.01 vol-hysteresis-state)
+end
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; VOLUME DEL MODELLO IN DOLLARI
@@ -516,7 +538,13 @@ to-report model-trading-volume-usd
   let current-p model-price
   if current-p <= 0 [ report 0 ]
   
-  report (model-trading-volume * current-p) * volume-hysteresis-factor
+  let raw-usd (model-trading-volume * current-p)
+  
+  let p-factor volume-hysteresis-factor         ;; Isteresi indotta dal Prezzo (beta-vol)
+  let v-factor true-volume-hysteresis-factor    ;; Isteresi indotta dal Volume (gamma-vol)
+
+  ;; Combina i due moltiplicatori sul volume grezzo
+  report raw-usd * p-factor * v-factor
 
 end
 
@@ -1260,11 +1288,11 @@ end]]></code>
     <button x="26" y="21" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
     <button x="94" y="21" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55">go</button>
     <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">500.0</input>
-    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">20.0</input>
+    <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">35.0</input>
     <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">10.0</input>
-    <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">1000.0</input>
-    <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">0.0</input>
-    <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">0.0</input>
+    <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">100.0</input>
+    <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">100.0</input>
+    <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">50.0</input>
     <input x="22" multiline="false" y="469" height="60" variable="trade-interval" type="number" width="156" sizeVersion="0">5.0</input>
     <input x="185" multiline="false" y="470" height="60" variable="h" type="number" width="156" sizeVersion="0">2.0</input>
     <input x="20" multiline="false" y="538" height="60" variable="trade-size" type="number" width="156" sizeVersion="0">5000.0</input>
@@ -1290,17 +1318,17 @@ end]]></code>
     <note x="283" y="474" backgroundDark="0" fontSize="12" width="150" markdown="false" height="29" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(trend)</note>
     <note x="255" y="142" backgroundDark="0" fontSize="12" width="150" markdown="false" height="29" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(exo current)</note>
     <slider x="195" step="1" y="282" max="100" width="151" display="window-size" height="50" min="5" direction="Horizontal" default="53.0" variable="window-size"></slider>
-    <slider x="192" step="1" y="71" max="100" width="155" display="number-of-followers" height="56" min="0" direction="Horizontal" default="12.0" variable="number-of-followers"></slider>
+    <slider x="192" step="1" y="71" max="100" width="155" display="number-of-followers" height="56" min="0" direction="Horizontal" default="4.0" variable="number-of-followers"></slider>
     <note x="582" y="53" backgroundDark="0" fontSize="60" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">buy</note>
     <note x="600" y="282" backgroundDark="0" fontSize="55" width="150" markdown="false" height="177" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">sell</note>
-    <slider x="22" step="0.1" y="682" max="5" width="250" display="hype-sensitivity" height="50" min="0" direction="Horizontal" default="0.5" variable="hype-sensitivity"></slider>
+    <slider x="22" step="0.1" y="682" max="5" width="250" display="hype-sensitivity" height="50" min="0" direction="Horizontal" default="0.7" variable="hype-sensitivity"></slider>
     <input x="28" multiline="false" y="338" height="60" variable="repulsion-radius" type="number" width="156" sizeVersion="0">2.0</input>
     <input x="191" multiline="false" y="335" height="60" variable="repulsion-strength" type="number" width="156" sizeVersion="0">0.0</input>
     <slider x="26" step="0.001" y="403" max="1" width="154" display="base-stubbornness" height="50" min="0" direction="Horizontal" default="0.916" variable="base-stubbornness"></slider>
     <slider x="188" step="0.01" y="401" max="1" width="155" display="min-stubbornness" height="50" min="0" direction="Horizontal" default="0.54" variable="min-stubbornness"></slider>
-    <slider x="23" step="0.01" y="622" max="1" width="250" display="pearson-threshold" height="50" min="0" direction="Horizontal" default="0.51" variable="pearson-threshold"></slider>
-    <slider x="316" step="0.001" y="695" max="0.5" width="250" display="price-sensitivity" height="50" min="0.001" direction="Horizontal" default="0.235" variable="price-sensitivity"></slider>
-    <slider x="566" step="0.01" y="696" max="1" width="250" display="beta-vol" height="50" min="0" direction="Horizontal" default="0.27" variable="beta-vol"></slider>
+    <slider x="23" step="0.01" y="622" max="1" width="250" display="pearson-threshold" height="50" min="0" direction="Horizontal" default="0.66" variable="pearson-threshold"></slider>
+    <slider x="316" step="0.001" y="695" max="0.5" width="250" display="price-sensitivity" height="50" min="0.001" direction="Horizontal" default="0.255" variable="price-sensitivity"></slider>
+    <slider x="566" step="0.01" y="696" max="1" width="250" display="beta-vol" height="50" min="0" direction="Horizontal" default="0.37" variable="beta-vol"></slider>
     <plot x="912" autoPlotX="true" yMax="1.0" autoPlotY="true" yAxis="\phi" y="13" xMin="0.0" height="175" legend="false" xMax="120.0" yMin="0.0" width="230" xAxis="tick" display="Parametri d'ordine">
       <setup></setup>
       <update></update>
@@ -1361,6 +1389,7 @@ end]]></code>
         <update>plot mean-price-correlation</update>
       </pen>
     </plot>
+    <slider x="183" step="0.01" y="538" max="1" width="162" display="gamma-vol" height="50" min="0" direction="Horizontal" default="0.75" variable="gamma-vol"></slider>
   </widgets>
   <info>## WHAT IS IT?
 
