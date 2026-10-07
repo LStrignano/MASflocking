@@ -1,0 +1,694 @@
+% \noindent 
+% Questo modello Agent-Based (ABM) simula le dinamiche di trading di un asset (ispirato al Bitcoin) utilizzando uno stormo di agenti divisi in tre categorie (Breed). Il modello evolve in due fasi: una \textbf{Fase 1 (Esogena)} guidata dai dati reali per calibrare il mercato, e una \textbf{Fase 2 (Endogena)} in cui il prezzo e i volumi sono determinati interamente dalle interazioni degli agenti.
+
+% \section{Topologia e Comportamento degli Agenti}
+% Gli agenti si muovono in uno spazio 2D che rappresenta il loro ``stato mentale'' rispetto al mercato:
+% \begin{itemize}
+%     \item \textbf{Asse Y (Sentiment):} Determina la direzione del trade. Se $Y \ge 0$, l'agente è propenso all'acquisto (Buy). Se $Y < 0$, è propenso alla vendita (Sell).
+%     \item \textbf{Asse X (Convinzione):} Determina la probabilità effettiva di eseguire il trade. La probabilità $p$ cresce man mano che l'agente si sposta verso destra:
+% \end{itemize}
+
+% \begin{equation}
+%     p = \frac{X - X_{min}}{X_{max} - X_{min}}
+% \end{equation}
+
+% \noindent Gli agenti sono divisi in tre tipologie di comportamento rispetto ai rendimenti (Return) del mercato:
+% \begin{enumerate}
+%     \item \textbf{Specie A (Gialli):} Trend-follower (seguono il mercato).
+%     \item \textbf{Specie B (Rossi):} Contrarian (vanno contro il mercato).
+%     \item \textbf{Specie C (Ciano):} Rumore di fondo (non influenzati direttamente dal rendimento per la direzione Y).
+% \end{enumerate}
+
+% \section{Dinamica del Movimento (Corrente e Hype)}
+% Gli agenti vengono spinti da una ``corrente'' macroeconomica. La componente orizzontale (volatilità) spinge tutti verso una maggiore probabilità di trade:
+
+% \begin{equation}
+%     C_x = k \cdot \text{Volatilità}
+% \end{equation}
+
+% \noindent La componente verticale dipende dalla specie e dal rendimento (Return):
+% \begin{align}
+%     C_y^{(A)} &= h \cdot \text{Return} \\
+%     C_y^{(B)} &= -h \cdot \text{Return} \\
+%     C_y^{(C)} &= 0
+% \end{align}
+
+% \subsection*{Hype e Stubbornness (Testardaggine)}
+% L'Hype (stress di mercato) è definito come la somma del rendimento assoluto e della volatilità:
+% \begin{equation}
+%     H = |\text{Return}| + \text{Volatilità}
+% \end{equation}
+
+% \noindent Quando l'Hype sale, gli agenti diventano meno ``testardi'' ($S_{dyn}$) e più inclini a seguire il gregge (flocking):
+% \begin{equation}
+%     S_{dyn} = \max\left(S_{min}, \min\left(S_{base}, S_{base} - (K_{hype} \cdot H)\right)\right)
+% \end{equation}
+% Dove $K_{hype}$ è la sensibilità all'hype impostata dall'utente.
+
+% \section{Transizione alla Fase 2 e Prezzo Endogeno}
+% Il modello calcola la correlazione di Pearson $r$ tra il volume generato dagli agenti e il volume reale. Se $r \ge \text{Threshold}$ per più di 5 tick consecutivi, il modello ``sgancia'' i dati reali e inizia a generare il prezzo endogenamente.
+
+% \vspace{0.3cm}
+% \noindent Il nuovo prezzo viene calcolato in base alla \textbf{Pressione di Mercato} ($P_{m}$), definita come la media delle coordinate Y degli agenti rispetto al massimo possibile:
+% \begin{equation}
+%     P_{m} = \frac{\bar{Y}}{Y_{max}}
+% \end{equation}
+
+% \noindent Il prezzo endogeno al tempo $t+1$ si aggiorna usando il parametro \texttt{price-sensitivity} ($S_p$):
+% \begin{equation}
+%     \text{Price}_{t+1} = \max\left(1, \text{Price}_t \cdot (1 + S_p \cdot P_{m})\right)
+% \end{equation}
+
+% \section{Il Doppio Motore di Isteresi (Memoria di Mercato)}
+% L'isteresi simula il fatto che i volumi in dollari non dipendono solo dall'azione istantanea, ma mantengono ``memoria'' dei picchi storici raggiunti (All-Time High). Nel modello agiscono due forze di isteresi moltiplicative.
+
+% \subsection{Isteresi del Prezzo ($\beta_{vol}$)}
+% Misura quanto il mercato ricorda i volumi basandosi sul crollo del prezzo rispetto al suo picco. Siano:
+% \begin{equation}
+%     R_{p}^{(current)} = \frac{\text{Price}_{corrente}}{\text{Price}_{iniziale}}, \quad R_{p}^{(ath)} = \frac{\text{Price}_{ath}}{\text{Price}_{iniziale}}
+% \end{equation}
+% Il fattore di isteresi del prezzo $F_p$ è:
+% \begin{equation}
+%     F_p = \max \left( 0.01, R_{p}^{(current)} + \beta_{vol} \left( R_{p}^{(ath)} - R_{p}^{(current)} \right) \right)
+% \end{equation}
+
+% \subsection{Isteresi del Volume ($\gamma_{vol}$)}
+% Misura quanto il mercato mantiene i volumi basandosi puramente sulle masse scambiate in passato (memoria dei flussi). Siano:
+% \begin{equation}
+%     R_{v}^{(current)} = \frac{\text{Volume}_{corrente}}{\text{Volume}_{iniziale}}, \quad R_{v}^{(ath)} = \frac{\text{Volume}_{ath}}{\text{Volume}_{iniziale}}
+% \end{equation}
+% Il fattore di isteresi del volume $F_v$ è:
+% \begin{equation}
+%     F_v = \max \left( 0.01, R_{v}^{(current)} + \gamma_{vol} \left( R_{v}^{(ath)} - R_{v}^{(current)} \right) \right)
+% \end{equation}
+
+% \subsection{Volume Finale in Dollari}
+% Il volume totale scambiato in USD dal modello, che tiene conto del volume grezzo scambiato dagli agenti ($Vol_{raw}$) moltiplicato per il prezzo attuale e ``gonfiato'' dalla memoria del mercato, è infine:
+% \begin{equation}
+%     \text{Vol}_{USD} = \text{Vol}_{raw} \cdot \text{Price}_{corrente} \cdot F_p \cdot F_v
+% \end{equation}
+
+\noindent
+Il progetto sviluppa un modello \textit{agent-based} per simulare la formazione
+di dinamiche di trading su un asset digitale ispirato a Bitcoin. L'obiettivo non
+è costruire un modello predittivo del prezzo reale, ma realizzare un ambiente
+computazionale in cui il comportamento collettivo degli agenti possa generare
+grandezze aggregate confrontabili con quelle osservate nei dati di mercato:
+prezzo, volume, volatilità, correlazioni e grado di coordinamento della
+popolazione.
+
+Il modello combina due livelli descrittivi. Da un lato è presente una componente
+finanziaria, costituita da prezzo, rendimento, volatilità, volume di scambio e
+portafoglio degli agenti. Dall'altro lato è presente una componente dinamica di
+tipo \textit{flocking}, in cui gli agenti si muovono in uno spazio bidimensionale,
+interagiscono con i propri vicini e modificano il proprio comportamento in
+funzione dello stato del mercato.
+
+Una caratteristica centrale del modello è la presenza di due fasi. Nella
+\textbf{Fase 1}, detta esogena, il prezzo del modello viene agganciato al prezzo
+reale o sintetico fornito dalla serie storica. In questa fase il sistema usa il
+dato esterno come riferimento iniziale. Nella \textbf{Fase 2}, detta endogena, il
+prezzo non viene più copiato dai dati, ma viene prodotto dalla dinamica interna
+degli agenti. Il passaggio tra le due fasi avviene automaticamente quando il
+volume generato dal modello risulta sufficientemente correlato con il volume
+reale.
+
+\section{Struttura generale del modello}
+
+Il modello considera tre popolazioni di agenti, indicate come \texttt{agents-a},
+\texttt{agents-b} e \texttt{agents-c}. Le tre specie non rappresentano singoli
+investitori reali, ma categorie comportamentali astratte. Esse permettono di
+studiare come gruppi con risposte diverse allo stesso segnale di mercato possano
+produrre dinamiche aggregate differenti.
+
+Ogni agente possiede alcune variabili individuali fondamentali:
+\begin{itemize}
+    \item una posizione nello spazio bidimensionale, data dalle coordinate
+    \texttt{xcor} e \texttt{ycor};
+    \item una velocità, descritta dalle componenti \texttt{velocity-x} e
+    \texttt{velocity-y};
+    \item un insieme di vicini o \texttt{flockmates}, che definisce la rete di
+    riferimento per il meccanismo di allineamento;
+    \item un portafoglio finanziario, composto da una quantità di Bitcoin
+    detenuta, \texttt{bitcoin-held}, e da una disponibilità liquida,
+    \texttt{cash-balance}.
+\end{itemize}
+
+Durante il \texttt{setup}, gli agenti vengono creati in una regione circolare
+centrale, ricevono una direzione iniziale casuale e vengono inizializzati con una
+dotazione casuale di Bitcoin e liquidità. Inoltre, per ogni specie viene costruita
+una rete fissa di interazione: ogni agente seleziona un certo numero di
+\texttt{flockmates} appartenenti alla stessa specie. In questo modo il modello
+separa la vicinanza sociale, rappresentata dalla rete, dalla vicinanza spaziale,
+rappresentata dalla posizione nello spazio.
+
+\section{Interpretazione dello spazio comportamentale}
+
+Lo spazio bidimensionale in cui si muovono gli agenti non rappresenta uno spazio
+fisico, ma uno spazio comportamentale. Le coordinate dell'agente sintetizzano il
+suo stato rispetto al mercato.
+
+L'asse verticale \(y\) rappresenta la direzione dell'azione di trading:
+\begin{itemize}
+    \item se \(y \geq 0\), l'agente si trova nella regione di acquisto;
+    \item se \(y < 0\), l'agente si trova nella regione di vendita.
+\end{itemize}
+
+L'asse orizzontale \(x\) rappresenta invece la propensione operativa dell'agente,
+cioè la probabilità che esso esegua effettivamente una compravendita. Tale
+probabilità è calcolata normalizzando la posizione orizzontale dell'agente
+rispetto alla larghezza del mondo:
+
+\begin{equation}
+    p_i =
+    \frac{x_i - x_{\min}}{x_{\max} - x_{\min}}.
+\end{equation}
+
+Nel codice il valore viene ulteriormente limitato all'intervallo \([0,1]\), in
+modo da ottenere sempre una probabilità valida:
+
+\begin{equation}
+    p_i =
+    \min\left[
+    1,
+    \max\left(
+    0,
+    \frac{x_i - x_{\min}}{x_{\max} - x_{\min}}
+    \right)
+    \right].
+\end{equation}
+
+Questa scelta permette di attribuire un significato comportamentale semplice alle
+coordinate: la posizione verticale stabilisce se l'agente tende a comprare o a
+vendere, mentre la posizione orizzontale stabilisce con quale probabilità
+partecipa al mercato.
+
+\section{Specie di agenti e risposta al rendimento}
+
+Le tre specie di agenti differiscono per il modo in cui rispondono al rendimento
+del mercato. Il rendimento attivo può essere quello reale, nella Fase 1, oppure
+quello endogeno, nella Fase 2. Indichiamo tale rendimento con \(r(t)\).
+
+La componente verticale della corrente è definita in modo diverso per le tre
+specie:
+
+\begin{align}
+    J_y^{(A)}(t) &= h r(t), \\
+    J_y^{(B)}(t) &= -h r(t), \\
+    J_y^{(C)}(t) &= 0.
+\end{align}
+
+La specie A può essere interpretata come una popolazione \textit{trend-following}:
+quando il rendimento è positivo, essa viene spinta verso la regione di acquisto;
+quando il rendimento è negativo, viene spinta verso la regione di vendita.
+
+La specie B ha una risposta opposta e può essere interpretata come una popolazione
+\textit{contrarian}: tende a muoversi contro il segnale di rendimento. La specie C
+non riceve una spinta verticale diretta dal rendimento e funziona come componente
+neutrale o rumore di fondo.
+
+Questa distinzione consente di osservare come l'interazione tra gruppi con
+comportamenti diversi influenzi la dinamica complessiva del mercato simulato.
+
+\section{Corrente di mercato e dinamica del movimento}
+
+Il movimento degli agenti è influenzato da una corrente di mercato. La corrente
+ha una componente orizzontale e una componente verticale. La componente
+orizzontale dipende dalla volatilità attiva:
+
+\begin{equation}
+    J_x(t) = k \sigma(t),
+\end{equation}
+
+dove \(k\) è un parametro di intensità e \(\sigma(t)\) è la volatilità. Nella
+Fase 1 viene usata la volatilità reale, mentre nella Fase 2 viene usata la
+volatilità endogena del modello.
+
+La funzione della componente orizzontale è spingere gli agenti lungo l'asse della
+propensione operativa. Quando la volatilità è più alta, il mercato è più
+instabile e gli agenti tendono a muoversi verso regioni in cui la probabilità di
+trading è maggiore.
+
+Il movimento è descritto mediante una velocità vettoriale. A ogni passo, la
+corrente modifica le componenti della velocità:
+
+\begin{align}
+    v_x(t+1) &= v_x(t) + J_x(t), \\
+    v_y(t+1) &= v_y(t) + J_y(t).
+\end{align}
+
+La nuova posizione prevista è poi calcolata come
+
+\begin{align}
+    x_i(t+1) &= x_i(t) + v_{x,i}(t+1), \\
+    y_i(t+1) &= y_i(t) + v_{y,i}(t+1).
+\end{align}
+
+Il modello utilizza condizioni al bordo riflettenti. Se un agente raggiunge un
+bordo del mondo, la componente corrispondente della velocità viene invertita.
+Questa scelta mantiene gli agenti confinati nello spazio comportamentale ed evita
+che escano dal dominio della simulazione.
+
+Infine, viene introdotta una perturbazione casuale della direzione di moto. La
+velocità viene ruotata di un angolo casuale compreso tra
+\(-\texttt{temperature}\) e \(+\texttt{temperature}\). Il parametro
+\texttt{temperature} controlla quindi il grado di rumore della dinamica: valori
+bassi producono traiettorie più regolari, mentre valori alti rendono il moto più
+disordinato.
+
+\section{Flocking, hype e stubbornness}
+
+\subsection{Condizioni iniziali}
+La scelta di inizializzare gli agenti in una regione circolare centrale non deve
+essere interpretata come una descrizione realistica dello stato iniziale del
+mercato, ma come una condizione iniziale neutra. Essa rappresenta una popolazione
+inizialmente poco polarizzata, nella quale gli agenti non sono ancora fortemente
+orientati né verso l'acquisto né verso la vendita.
+
+Questa scelta è utile per studiare se le dinamiche collettive osservate nel
+modello emergano dalle regole di interazione, dalla corrente di mercato e dal
+meccanismo di flocking, piuttosto che essere imposte artificialmente dalla
+condizione iniziale.
+
+Tuttavia, la condizione iniziale non è unica. Per analizzare la robustezza del
+modello è opportuno confrontare diverse inizializzazioni: distribuzione centrale,
+distribuzione uniforme, distribuzioni sbilanciate verso l'acquisto o la vendita,
+e condizioni differenziate per specie. In questo modo è possibile distinguere gli
+effetti realmente generati dalla dinamica del modello da quelli dipendenti dalla
+scelta iniziale.\\
+
+
+Gli agenti non si muovono in modo completamente indipendente. Ogni agente tende
+ad allineare la propria direzione con quella dei propri \texttt{flockmates}. Il
+nuovo orientamento viene calcolato come combinazione pesata tra la direzione
+individuale dell'agente e la direzione media dei suoi vicini.
+
+Sia \(\theta_i\) la direzione dell'agente e siano
+
+\begin{equation}
+    d_{x,i} = \cos(\theta_i),
+    \qquad
+    d_{y,i} = \sin(\theta_i)
+\end{equation}
+
+le componenti della sua direzione. Indicando con
+\(\bar{d}_{x,i}\) e \(\bar{d}_{y,i}\) le componenti medie dei suoi
+\texttt{flockmates}, la direzione aggiornata è costruita come
+
+\begin{align}
+    d_{x,i}^{new}
+    &=
+    s(t)d_{x,i}
+    +
+    \left[1-s(t)\right]\bar{d}_{x,i}, \\
+    d_{y,i}^{new}
+    &=
+    s(t)d_{y,i}
+    +
+    \left[1-s(t)\right]\bar{d}_{y,i}.
+\end{align}
+
+Il parametro \(s(t)\) rappresenta la \textit{stubbornness}, cioè la tendenza
+dell'agente a mantenere la propria direzione precedente. Se \(s(t)\) è alto,
+l'agente è poco influenzato dal gruppo; se \(s(t)\) è basso, l'agente tende ad
+allinearsi maggiormente ai propri vicini.
+
+Nel modello la stubbornness non è costante, ma dipende dall'hype di mercato. Lo
+hype è definito come
+
+\begin{equation}
+    H(t)=|r_m(t)|+\sigma_m(t),
+\end{equation}
+
+dove \(r_m(t)\) è il rendimento endogeno del modello e \(\sigma_m(t)\) è la
+volatilità endogena. Quando il mercato è più instabile, cioè quando rendimento e
+volatilità sono più elevati, gli agenti diventano meno testardi e più sensibili
+al comportamento collettivo.
+
+La stubbornness dinamica è calcolata come
+
+\begin{equation}
+    s(t)
+    =
+    \max
+    \left[
+    s_{\min},
+    \min
+    \left(
+    s_{\mathrm{base}},
+    s_{\mathrm{base}} -
+    K_{\mathrm{hype}}H(t)
+    \right)
+    \right].
+\end{equation}
+
+Il parametro \(K_{\mathrm{hype}}\) controlla quanto rapidamente la stubbornness
+diminuisce all'aumentare dello stress di mercato.
+
+\section{Trading e portafoglio degli agenti}
+
+Ogni agente possiede un portafoglio formato da liquidità e Bitcoin. La procedura
+di trading utilizza il prezzo endogeno corrente del modello, indicato con
+\(P_m(t)\). Se il prezzo è positivo, l'agente può comprare o vendere a seconda
+della propria posizione verticale.
+
+Se \(y_i \geq 0\), l'agente si trova nella regione di acquisto. La quantità
+massima acquistabile è
+
+\begin{equation}
+    q_i^{buy}
+    =
+    \min
+    \left(
+    \texttt{trade-size},
+    \left\lfloor
+    \frac{C_i}{P_m(t)}
+    \right\rfloor
+    \right),
+\end{equation}
+
+dove \(C_i\) è la liquidità disponibile dell'agente. Questa formula impedisce
+all'agente di comprare più Bitcoin di quanto possa permettersi.
+
+Se \(y_i < 0\), l'agente si trova nella regione di vendita. La quantità massima
+vendibile è
+
+\begin{equation}
+    q_i^{sell}
+    =
+    \min
+    \left(
+    \texttt{trade-size},
+    B_i
+    \right),
+\end{equation}
+
+dove \(B_i\) è la quantità di Bitcoin detenuta dall'agente. In questo modo non è
+possibile vendere Bitcoin non posseduti.
+
+L'operazione avviene solo se un numero casuale uniforme tra 0 e 1 è minore della
+probabilità di scambio \(p_i\). Ogni acquisto o vendita riuscita contribuisce al
+volume di trading del modello, misurato inizialmente in Bitcoin.
+
+\section{Dati di mercato e scenari}
+
+Il modello può essere eseguito utilizzando diverse sorgenti di dati. La procedura
+\texttt{scarica-dati} seleziona lo scenario in base alla variabile
+\texttt{scenario}. Le possibilità previste sono:
+
+\begin{itemize}
+    \item caricamento di una serie storica da file CSV;
+    \item utilizzo di un prezzo live tramite API;
+    \item generazione di scenari sintetici di mercato.
+\end{itemize}
+
+Gli scenari sintetici includono:
+\begin{itemize}
+    \item \textit{bull market}, con drift positivo;
+    \item \textit{bear market}, con drift negativo;
+    \item mercato laterale, con drift nullo;
+    \item crash improvviso;
+    \item bolla speculativa seguita da collasso.
+\end{itemize}
+
+Questa struttura rende il modello flessibile: è possibile confrontare la risposta
+degli agenti sia a dati esterni sia a condizioni artificiali controllate.
+
+\section{Fase 1: dinamica esogena}
+
+Nella Fase 1 il modello è guidato dai dati esterni. Il prezzo endogeno viene
+posto uguale al prezzo reale o sintetico letto dalla serie storica:
+
+\begin{equation}
+    P_m(t) = P_{BTC}(t).
+\end{equation}
+
+Anche rendimento e volatilità del modello vengono copiati dai dati esterni:
+
+\begin{align}
+    r_m(t) &= r_{BTC}(t), \\
+    \sigma_m(t) &= \sigma_{BTC}(t).
+\end{align}
+
+Questa fase ha la funzione di inizializzare il sistema e permettere agli agenti
+di produrre volumi confrontabili con quelli della serie di riferimento. Il
+modello resta in questa fase finché la correlazione media tra volume simulato e
+volume reale non supera stabilmente una soglia prefissata.
+
+\section{Correlazione dei volumi e passaggio alla Fase 2}
+
+Il modello confronta il volume reale con il volume generato dagli agenti mediante
+la correlazione di Pearson. Date due serie \(X\) e \(Y\), la correlazione è
+
+\begin{equation}
+    r =
+    \frac{
+    \sum_i (x_i-\bar{x})(y_i-\bar{y})
+    }{
+    \sqrt{\sum_i (x_i-\bar{x})^2}
+    \sqrt{\sum_i (y_i-\bar{y})^2}
+    }.
+\end{equation}
+
+Nel caso dei volumi, \(X\) rappresenta lo storico recente dei volumi simulati,
+mentre \(Y\) rappresenta lo storico recente dei volumi reali. Il calcolo viene
+effettuato su una finestra mobile di ampiezza \texttt{window-size}, così da
+misurare la somiglianza recente tra le due serie.
+
+Il passaggio alla Fase 2 avviene quando la correlazione media dei volumi supera
+la soglia \texttt{pearson-threshold} per più di cinque tick consecutivi:
+
+\begin{equation}
+    \overline{r}_V \geq \texttt{pearson-threshold}.
+\end{equation}
+
+Quando questa condizione viene soddisfatta, la variabile
+\texttt{current-disabled?} viene impostata a \texttt{true}. Da quel momento il
+modello smette di copiare il prezzo esterno e inizia a generare il prezzo in modo
+endogeno.
+
+\section{Fase 2: prezzo endogeno}
+
+Nella Fase 2 il prezzo viene determinato dalla posizione media verticale degli
+agenti. La coordinata \(y\) è interpretata come indicatore della pressione di
+acquisto o vendita. La pressione di mercato è definita come
+
+\begin{equation}
+    M(t)=\frac{\bar{y}(t)}{y_{\max}},
+\end{equation}
+
+dove \(\bar{y}(t)\) è la media delle coordinate verticali di tutti gli agenti e
+\(y_{\max}\) è il massimo valore verticale del mondo NetLogo.
+
+Se \(M(t)>0\), la popolazione è mediamente orientata verso l'acquisto e il prezzo
+subisce una pressione rialzista. Se \(M(t)<0\), la popolazione è mediamente
+orientata verso la vendita e il prezzo subisce una pressione ribassista.
+
+Il prezzo endogeno viene aggiornato secondo
+
+\begin{equation}
+    P_m(t+1)
+    =
+    \max
+    \left[
+    1,
+    P_m(t)
+    \left(
+    1+
+    S_p M(t)
+    \right)
+    \right],
+\end{equation}
+
+dove \(S_p=\texttt{price-sensitivity}\) controlla la sensibilità del prezzo alla
+pressione di mercato. Il limite inferiore pari a 1 evita che il prezzo diventi
+nullo o negativo.
+
+Il rendimento endogeno viene poi calcolato come
+
+\begin{equation}
+    r_m(t)
+    =
+    \frac{P_m(t)-P_m(t-1)}{P_m(t-1)}.
+\end{equation}
+
+La volatilità endogena è approssimata dal valore assoluto del rendimento, con una
+soglia minima:
+
+\begin{equation}
+    \sigma_m(t)
+    =
+    \max
+    \left(
+    0.005,
+    |r_m(t)|
+    \right).
+\end{equation}
+
+La soglia minima impedisce alla volatilità di annullarsi completamente e mantiene
+attivi i meccanismi dipendenti da essa.
+
+\section{Volume simulato e isteresi}
+
+Il volume grezzo del modello, \(\text{Vol}_{raw}\), è dato dalla quantità totale
+di Bitcoin scambiata dagli agenti nel tick corrente. Per confrontarlo con un
+volume reale espresso in dollari, esso viene moltiplicato per il prezzo endogeno:
+
+\begin{equation}
+    \text{Vol}_{raw}^{USD}
+    =
+    \text{Vol}_{raw} \cdot P_m(t).
+\end{equation}
+
+Nel modello viene introdotto un fattore di memoria aggregata del mercato. Tale
+fattore è ispirato al concetto di isteresi, intesa come dipendenza dello stato
+attuale di un sistema non solo dal valore corrente delle variabili rilevanti, ma
+anche dal percorso con cui tale stato è stato raggiunto.
+
+Nel caso considerato, il volume simulato non dipende soltanto dal prezzo corrente,
+ma anche dal massimo prezzo raggiunto nella finestra di simulazione. Due stati con
+lo stesso prezzo corrente possono quindi produrre livelli diversi di attività di
+mercato se sono stati preceduti da storie differenti. In questo senso il termine
+può essere interpretato come una forma fenomenologica di path dependence.
+
+È importante sottolineare che tale memoria non rappresenta necessariamente una
+memoria esplicita dei singoli agenti. Nel modello attuale essa è introdotta come
+variabile macroscopica aggregata, utile a rappresentare la persistenza
+dell'attenzione e dell'attività di mercato dopo fasi di forte crescita del prezzo.
+Siano
+
+\begin{equation}
+    R_{\mathrm{current}}
+    =
+    \frac{P_m(t)}{P_{\mathrm{initial}}},
+    \qquad
+    R_{\mathrm{ATH}}
+    =
+    \frac{P_{\mathrm{ATH}}}{P_{\mathrm{initial}}},
+\end{equation}
+
+dove \(P_{\mathrm{initial}}\) è il prezzo iniziale e \(P_{\mathrm{ATH}}\) è il
+massimo prezzo raggiunto nella finestra di simulazione. Il fattore di isteresi è
+
+\begin{equation}
+    H_V(t)
+    =
+    \max
+    \left[
+    0.01,
+    R_{\mathrm{current}}
+    +
+    \beta_{\mathrm{vol}}
+    \left(
+    R_{\mathrm{ATH}} -
+    R_{\mathrm{current}}
+    \right)
+    \right].
+\end{equation}
+
+Il parametro \(\beta_{\mathrm{vol}}\) controlla il peso della memoria del massimo
+storico. Se \(\beta_{\mathrm{vol}}\) è vicino a zero, il fattore dipende quasi
+solo dal prezzo corrente. Se invece è più alto, il modello mantiene una memoria
+più marcata dei picchi passati.
+
+Il volume finale in dollari prodotto dal modello è quindi
+
+\begin{equation}
+    \text{Vol}_{model}^{USD}
+    =
+    \text{Vol}_{raw}
+    \cdot
+    P_m(t)
+    \cdot
+    H_V(t).
+\end{equation}
+
+\section{Metriche collettive e stabilità}
+
+Oltre a prezzo e volume, il modello calcola alcune metriche utili per analizzare
+la struttura collettiva degli agenti.
+
+La prima è il parametro d'ordine, che misura il grado di allineamento della
+popolazione. Per un insieme di \(N\) agenti, esso è definito come
+
+\begin{equation}
+    \Phi
+    =
+    \frac{
+    \sqrt{
+    \left(\sum_i dx_i\right)^2
+    +
+    \left(\sum_i dy_i\right)^2
+    }
+    }{N}.
+\end{equation}
+
+Se gli agenti sono orientati in direzioni casuali, le componenti vettoriali si
+compensano e \(\Phi\) tende a valori bassi. Se invece gli agenti sono allineati,
+\(\Phi\) si avvicina a 1. Il modello calcola sia il parametro d'ordine globale,
+sia quello specifico per ciascuna specie.
+
+Una seconda metrica è
+
+\begin{equation}
+    \lambda =
+    \text{slope}
+    \left[
+    \log(\Phi(t)+0.0001)
+    \right],
+\end{equation}
+
+dove la pendenza è calcolata tramite regressione lineare su una finestra mobile.
+Questa grandezza fornisce una misura della tendenza recente del parametro
+d'ordine: se \(\lambda>0\), l'ordine collettivo tende ad aumentare; se
+\(\lambda<0\), tende a diminuire.
+
+Il modello calcola inoltre la correlazione di fase tra le specie A e B,
+utilizzando le loro posizioni medie verticali:
+
+\begin{equation}
+    r_{AB}
+    =
+    \mathrm{corr}
+    \left(
+    \bar{y}_A,
+    \bar{y}_B
+    \right).
+\end{equation}
+
+Questa quantità misura se le due specie si muovono nella stessa direzione lungo
+l'asse comportamentale di acquisto-vendita oppure se tendono a muoversi in modo
+opposto.
+
+Infine, viene calcolato un indice basato sulla distribuzione relativa delle tre
+popolazioni:
+
+\begin{equation}
+    H =
+    s_A^2+s_B^2+s_C^2,
+\end{equation}
+
+dove \(s_A\), \(s_B\) e \(s_C\) sono le quote relative delle tre specie. Questo
+indice è minimo quando le tre popolazioni sono bilanciate e aumenta quando una
+specie domina sulle altre. Per questo motivo può essere interpretato come un
+indice di concentrazione della composizione della popolazione.
+
+\section{Sintesi del funzionamento del modello}
+
+Il funzionamento complessivo del modello può essere riassunto come segue. In una
+prima fase, gli agenti vengono inizializzati con portafogli eterogenei e si
+muovono in uno spazio comportamentale influenzato da segnali di mercato esterni.
+La loro posizione determina la probabilità e la direzione delle operazioni di
+trading. Le operazioni aggregate producono un volume simulato, che viene
+confrontato con il volume reale tramite correlazione di Pearson.
+
+Quando la correlazione dei volumi supera stabilmente la soglia impostata, il
+modello passa alla fase endogena. Da quel momento il prezzo non è più imposto
+dall'esterno, ma emerge dalla distribuzione degli agenti nello spazio. Il mercato
+simulato diventa quindi il risultato dell'interazione tra movimento, flocking,
+portafogli, segnali di rendimento, volatilità e memoria dei picchi passati.
+
+Il modello costituisce quindi un laboratorio computazionale per studiare come
+semplici regole individuali possano generare dinamiche aggregate complesse e
+come un sistema inizialmente guidato dai dati possa evolvere verso una dinamica
+autonoma.

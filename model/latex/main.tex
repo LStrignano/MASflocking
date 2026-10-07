@@ -1,0 +1,173 @@
+\documentclass[9pt,a4paper]{article} % Puoi cambiare in report/book se preferisci
+
+% ---------- CODIFICA E LINGUA ----------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+
+% ---------- GEOMETRIA PAGINA ----------
+\usepackage[a4paper,margin=2.2cm]{geometry}
+% Se vuoi ancora più testo per pagina:
+% \usepackage[a4paper,margin=2cm]{geometry}
+
+% ---------- FONT E MICROTIPOGRAFIA ----------
+\usepackage{lmodern}   % Latin Modern, pulito e adatto alla matematica
+\usepackage{microtype} % Migliora la leggibilità (interword spacing, protrusion)
+
+% ---------- MATEMATICA ----------
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{mathtools} % Estensione di amsmath
+\usepackage{bm}        % Bold math: \bm{...}
+\usepackage{physics}   % Comandi utili in fisica (bra-ket, deriv., ecc.)
+\usepackage{slashed}   % Notazione slash di Dirac: \slashed{p}
+\usepackage{tensor}    % Per indici tensori: \tensor{T}{^\mu_\nu}
+
+\numberwithin{equation}{section} % Equazioni numerate secondo la sezione
+
+% ---------- GRAFICA E COLORI ----------
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+% ---------- HYPERREF & RIFERIMENTI ----------
+\usepackage{hyperref}
+\usepackage{cleveref} % Riferimenti intelligenti: \Cref, \cref
+
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = blue,
+  citecolor  = teal,
+  urlcolor   = magenta
+}
+
+% ---------- FORMATO ARTICOLO SCIENTIFICO ----------
+\usepackage{authblk}
+
+% ---------- BIBLIOGRAFIA ----------
+% Per citare articoli scientifici con \cite{...} e stampare la bibliografia finale.
+\usepackage[
+    backend=biber,
+    style=numeric,
+    sorting=none
+]{biblatex}
+
+% Nome del file .bib contenente gli articoli.
+\addbibresource{bibliografia.bib}
+
+% ---------- COLONNE MULTIPLE ----------
+\usepackage{multicol}
+
+% ---------- AMBIENTI TEOREMI / DEFINIZIONI (OPZIONALE) ----------
+\theoremstyle{definition}
+\newtheorem{definition}{Definizione}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Teorema}[section]
+\newtheorem{proposition}{Proposizione}[section]
+\newtheorem{lemma}{Lemma}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Osservazione}[section]
+\newtheorem{example}{Esempio}[section]
+
+% ---------- INSERIMENTO DI CODICE NEL TESTO ----------
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Stile generale per i blocchi di codice
+\lstdefinestyle{codice}{
+    basicstyle=\ttfamily\small,
+    numbers=left,
+    numberstyle=\tiny,
+    stepnumber=1,
+    numbersep=8pt,
+    frame=single,
+    breaklines=true,
+    breakatwhitespace=false,
+    tabsize=4,
+    showstringspaces=false,
+    captionpos=b,
+    backgroundcolor=\color{gray!8},
+    keywordstyle=\color{blue!70!black}\bfseries,
+    commentstyle=\color{green!40!black},
+    stringstyle=\color{red!60!black}
+}
+
+% Imposta questo stile come predefinito
+\lstset{style=codice}
+
+% ---------- Per l'indentazione a sinistra dei paragrafi ----------
+\setlength{\parindent}{0pt}
+
+% Ecco un esempio di codice inline (chiaramente da inserire all'interno del testo)
+% \begin{lstlisting}[language=Python, caption={Simulazione numerica}, label={lst:simulazione}]
+% import numpy as np
+
+% N = 100
+% x = np.zeros(N)
+
+% for i in range(N):
+%     x[i] = i**2
+% \end{lstlisting}
+
+% ---------- COMANDI PERSONALIZZATI (ESEMPI) ----------
+% Spazio-tempo di Minkowski
+\newcommand{\Mink}{\mathbb{M}}
+% Operatore d'Alembert
+\newcommand{\dal}{\Box}
+% Notazione per 4-vettori
+\newcommand{\fourvec}[1]{\boldsymbol{#1}}
+
+% ---------- TITOLO DOCUMENTO ----------
+\title{Progetto di MAS}
+
+\author[1]{Lorenzo}
+\author[1]{Paolo}
+\author[1]{Christian}
+
+\affil[1]{Università degli Studi di Torino}
+
+\date{\today}
+
+% \usepackage{xcolor}
+% \color{blue}   % oppure red, black, gray, ecc.
+% \usepackage{xcolor}
+% \definecolor{minvisiblegray}{gray}{0.80} % ~ #C8C8C8
+% \color{minvisiblegray}
+
+\begin{document}
+
+% =========================================================
+% MODALITÀ ARTICOLO SCIENTIFICO
+% =========================================================
+% Di base questi comandi sono commentati, quindi il documento resta:
+% - senza titolo iniziale;
+% - senza abstract;
+% - in una sola colonna.
+
+% Per ottenere il formato articolo scientifico:
+% 1. scommenta \maketitle;
+% 2. scommenta l'ambiente abstract;
+% 3. scommenta \twocolumn prima del testo principale;
+% 4. scommenta \printbibliography alla fine.
+
+% \maketitle
+
+% \begin{abstract}
+% In questo lavoro si presenta ...
+% Qui va inserito un breve riassunto dell'articolo: contesto, obiettivo,
+% metodo utilizzato e risultati principali.
+% \end{abstract}
+
+% \vspace{0.5cm}
+
+\input{spiegazione_codice_teoria.tex}
+
+% \begin{multicols}{2}
+% \input{articolo.tex}
+% \end{multicols}
+
+% =========================================================
+% BIBLIOGRAFIA
+% =========================================================
+% Scommenta questa riga se vuoi stampare la bibliografia finale.
+% \printbibliography
+
+\end{document}

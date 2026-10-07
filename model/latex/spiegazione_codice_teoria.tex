@@ -1,0 +1,4110 @@
+\subsection{Estensioni, specie di agenti e variabili principali del modello}
+
+\begin{lstlisting}[caption={Dichiarazione delle estensioni, delle specie e delle variabili principali}]
+extensions [ fetch table csv ]
+
+breed [ agents-a agent-a ]
+breed [ agents-b agent-b ]
+breed [ agents-c agent-c ]
+
+globals [
+  prices
+  day-index
+
+  ;; DATI REALI (STARTER PER LA CORRENTE)
+  btc-price
+  btc-initial-price
+  btc-ath-price
+  btc-prev-price
+  btc-return
+  btc-volatility
+
+  ;; PREZZO E VOLATILITA' STIMATI (ENDOGENI)
+  model-price
+  model-return
+  model-volatility
+  model-trading-volume
+  real-trading-volume-usd
+
+  ;; PARAMETRI CORRENTE STARTER E SWITCH DINAMICO
+  current-disabled?
+  ;; pearson-threshold viene gestito dallo slider nell'interfaccia
+  current-hype                  ;; Livello di stress/hype di mercato
+
+  ;; SCALING E ISTERESI VOLUMI
+  real-volume-initial
+  real-volume-ath
+  volume-hysteresis-state
+
+  ;; STORICO E CORRELAZIONE VOLUMI (PEARSON)
+  model-volume-history
+  real-volume-history
+  volume-correlation
+  volume-correlation-history
+  mean-volume-correlation
+  above-threshold-counter       ;; Conta i tick consecutivi sopra pearson-threshold
+
+  ;; STORICO E CORRELAZIONE PREZZI (PEARSON)
+  model-price-history
+  real-price-history
+  price-correlation
+  price-correlation-history
+  mean-price-correlation
+
+  op-history
+  ya-history
+  yb-history
+  lambda-instability
+  heterogeneity-index-value
+  phase-correlation-ab
+]
+
+turtles-own [
+  flockmates
+  bitcoin-held
+  cash-balance
+  velocity-x
+  velocity-y
+]
+\end{lstlisting}
+
+Questa prima parte del codice definisce la struttura generale del modello. In
+particolare, vengono dichiarate le estensioni utilizzate, le specie di agenti e
+le variabili globali o individuali che saranno impiegate nelle procedure
+successive.
+
+La riga
+
+\[
+\texttt{extensions [ fetch table csv ]}
+\]
+
+carica tre estensioni di NetLogo. L'estensione \texttt{fetch} permette di
+effettuare richieste verso risorse esterne, ad esempio scaricando dati da una
+API. In questo modello essa è utile per ottenere dati reali relativi a Bitcoin.
+L'estensione \texttt{table} consente di manipolare strutture dati del tipo
+chiave-valore, particolarmente utili quando si ricevono dati in formato
+strutturato. Infine, l'estensione \texttt{csv} permette di leggere o scrivere
+dati in formato CSV, cioè in un formato tabellare comunemente usato per salvare
+serie storiche o risultati di simulazione.
+
+Le tre righe successive definiscono tre specie di agenti tramite il costrutto
+\texttt{breed}:
+
+\[
+\texttt{breed [ agents-a agent-a ]},
+\qquad
+\texttt{breed [ agents-b agent-b ]},
+\qquad
+\texttt{breed [ agents-c agent-c ]}.
+\]
+
+In NetLogo, una \texttt{breed} rappresenta una sottopopolazione di turtles. Il
+primo nome all'interno della parentesi quadra è il nome plurale della specie,
+mentre il secondo è il nome singolare. Ad esempio, \texttt{agents-a} indica
+l'insieme degli agenti della prima specie, mentre \texttt{agent-a} indica un
+singolo agente di quella specie.
+
+L'introduzione di più specie permette di distinguere gruppi differenti di agenti.
+Dal punto di vista modellistico, tali gruppi possono rappresentare categorie
+diverse di operatori, strategie differenti, popolazioni eterogenee oppure classi
+di agenti con comportamenti o parametri differenti. Anche se appartengono a
+specie diverse, tutti questi agenti rimangono comunque turtles: un comando come
+
+\[
+\texttt{ask turtles [ ... ]}
+\]
+
+agisce quindi su tutte le specie contemporaneamente.
+
+Il blocco \texttt{globals} contiene le variabili globali del modello. Una
+variabile globale non appartiene a un singolo agente, ma descrive una proprietà
+dell'intero sistema o una grandezza accessibile da tutte le procedure.
+
+Le prime due variabili sono
+
+\[
+\texttt{prices},
+\qquad
+\texttt{day-index}.
+\]
+
+La variabile \texttt{prices} contiene la serie storica dei prezzi scaricati o
+letti dal modello. La variabile \texttt{day-index} indica invece quale elemento
+della serie storica viene utilizzato al passo corrente della simulazione. Essa
+funziona quindi come indice temporale: aumentando \texttt{day-index}, il modello
+procede lungo la sequenza dei dati di mercato.
+
+La sezione successiva riguarda i dati reali di Bitcoin:
+
+\[
+\texttt{btc-price},
+\quad
+\texttt{btc-initial-price},
+\quad
+\texttt{btc-ath-price},
+\quad
+\texttt{btc-prev-price},
+\quad
+\texttt{btc-return},
+\quad
+\texttt{btc-volatility}.
+\]
+
+Bitcoin è una criptovaluta, cioè un'attività digitale scambiata su mercati
+elettronici. Come per un'azione o per un altro strumento finanziario, il suo
+prezzo varia nel tempo in base all'incontro tra domanda e offerta.
+
+La variabile \texttt{btc-price} rappresenta il prezzo reale corrente di Bitcoin
+nel dato temporale considerato. La variabile \texttt{btc-initial-price} memorizza
+il prezzo iniziale della serie utilizzata, mentre \texttt{btc-ath-price}
+rappresenta il massimo storico raggiunto nella finestra di dati considerata. La
+sigla ATH significa \textit{All-Time High}, cioè massimo storico o massimo
+raggiunto da una grandezza in un certo intervallo di osservazione.
+
+La variabile \texttt{btc-prev-price} contiene il prezzo precedente di Bitcoin ed
+è necessaria per calcolare il rendimento. In finanza, il rendimento misura la
+variazione relativa del prezzo tra due istanti consecutivi. Se \(P(t)\) indica
+il prezzo corrente e \(P(t-1)\) il prezzo precedente, il rendimento può essere
+definito come
+
+\[
+r(t)=\frac{P(t)-P(t-1)}{P(t-1)}.
+\]
+
+Nel modello, il rendimento reale di Bitcoin viene memorizzato nella variabile
+
+\[
+\texttt{btc-return}.
+\]
+
+La variabile \texttt{btc-volatility} rappresenta invece la volatilità reale di
+Bitcoin. In ambito finanziario, la volatilità misura l'intensità delle variazioni
+di prezzo. Un mercato molto volatile è un mercato in cui il prezzo cambia molto
+rapidamente o con variazioni ampie. In una versione semplificata, la volatilità
+può essere calcolata come valore assoluto del rendimento:
+
+\[
+V(t)=|r(t)|.
+\]
+
+Questa scelta elimina il segno della variazione: una forte crescita e una forte
+diminuzione del prezzo producono entrambe un valore elevato di volatilità.
+
+Il blocco successivo introduce le variabili endogene del modello:
+
+\[
+\texttt{model-price},
+\quad
+\texttt{model-return},
+\quad
+\texttt{model-volatility},
+\quad
+\texttt{model-trading-volume},
+\quad
+\texttt{real-trading-volume-usd}.
+\]
+
+Una variabile si dice endogena quando viene prodotta internamente dal modello. In
+questo caso, \texttt{model-price} rappresenta il prezzo generato dalla dinamica
+simulata degli agenti, mentre \texttt{btc-price} rappresenta un prezzo reale
+esterno. La distinzione tra prezzo reale e prezzo del modello è importante:
+il primo deriva dai dati empirici, il secondo deriva invece dall'interazione tra
+gli agenti.
+
+La variabile \texttt{model-return} rappresenta il rendimento del prezzo endogeno,
+calcolato confrontando il prezzo prodotto dal modello con il suo valore
+precedente. Analogamente, \texttt{model-volatility} misura l'intensità delle
+variazioni del prezzo simulato.
+
+La variabile \texttt{model-trading-volume} rappresenta il volume di scambio
+generato dagli agenti del modello. In finanza, il volume di scambio indica la
+quantità complessiva di un'attività finanziaria comprata o venduta in un certo
+intervallo di tempo. Nel caso del modello, il volume non deriva dal mercato reale,
+ma dal numero di operazioni effettuate dagli agenti.
+
+La variabile \texttt{real-trading-volume-usd} rappresenta invece il volume reale
+del mercato, espresso in dollari. Il suffisso \texttt{usd} indica che il valore è
+misurato in dollari statunitensi. Questa variabile permette di confrontare il
+volume simulato con il volume reale osservato.
+
+La sezione dedicata alla corrente e allo switch dinamico contiene le variabili
+
+\[
+\texttt{current-disabled?},
+\qquad
+\texttt{current-hype}.
+\]
+
+La variabile \texttt{current-disabled?} è una variabile booleana, cioè una
+variabile che può assumere valore vero o falso. Il punto interrogativo finale è
+una convenzione frequente in NetLogo per indicare variabili o reporter logici.
+Essa serve a stabilire se la corrente esterna deve essere disattivata.
+
+La corrente rappresenta una spinta o un campo esterno che influenza il movimento
+degli agenti. Nelle prime fasi del modello, questa corrente può essere guidata
+dai dati reali del mercato, ad esempio dalla volatilità di Bitcoin. In seguito,
+il modello può decidere di disattivare o modificare questa dipendenza esterna in
+base alla qualità dell'accordo tra il mercato reale e il mercato simulato.
+
+La variabile \texttt{current-hype} rappresenta il livello di stress o hype di
+mercato. Dal punto di vista economico, il termine \textit{hype} indica una fase
+di forte attenzione, entusiasmo o agitazione collettiva intorno a un'attività
+finanziaria. In un mercato con alto hype, gli agenti possono essere più reattivi,
+più propensi a operare e più sensibili alle variazioni di prezzo o volume.
+
+Il commento relativo a \texttt{pearson-threshold} indica che tale soglia non è
+dichiarata come variabile globale nel codice, perché viene gestita tramite uno
+slider dell'interfaccia. Essa rappresenta una soglia utilizzata per stabilire se
+la correlazione tra dati reali e dati simulati è sufficientemente elevata.
+
+La sezione successiva riguarda lo scaling e l'isteresi dei volumi:
+
+\[
+\texttt{real-volume-initial},
+\qquad
+\texttt{real-volume-ath},
+\qquad
+\texttt{volume-hysteresis-state}.
+\]
+
+La variabile \texttt{real-volume-initial} memorizza il volume reale iniziale,
+mentre \texttt{real-volume-ath} memorizza il massimo volume reale osservato nella
+finestra di dati considerata. Anche qui, \texttt{ath} indica un massimo storico o
+un massimo relativo all'intervallo analizzato.
+
+Il concetto di scaling indica una trasformazione usata per portare grandezze di
+ordini di grandezza diversi su scale confrontabili. Questo è utile perché il
+volume reale di mercato può essere enormemente più grande del volume prodotto da
+un numero limitato di agenti simulati.
+
+La variabile \texttt{volume-hysteresis-state} rappresenta lo stato di isteresi
+dei volumi. In generale, si parla di isteresi quando lo stato attuale di un
+sistema non dipende solo dal valore corrente di una variabile, ma anche dalla sua
+storia precedente. Dal punto di vista economico, ciò può rappresentare un effetto
+di memoria del mercato: un periodo di forte volume o forte stress può continuare
+a influenzare il comportamento degli agenti anche dopo che il segnale originario
+si è ridotto.
+
+Le variabili successive memorizzano lo storico dei volumi e la loro correlazione:
+
+\[
+\texttt{model-volume-history},
+\quad
+\texttt{real-volume-history},
+\quad
+\texttt{volume-correlation},
+\quad
+\texttt{volume-correlation-history},
+\quad
+\texttt{mean-volume-correlation},
+\quad
+\texttt{above-threshold-counter}.
+\]
+
+Le variabili \texttt{model-volume-history} e \texttt{real-volume-history}
+contengono rispettivamente la sequenza temporale dei volumi prodotti dal modello
+e dei volumi reali. Questi storici sono necessari per confrontare la dinamica
+simulata con quella empirica.
+
+La variabile \texttt{volume-correlation} contiene il coefficiente di correlazione
+di Pearson tra i volumi del modello e i volumi reali. La correlazione di Pearson
+misura il grado di relazione lineare tra due serie di dati. Se \(X\) e \(Y\)
+sono due serie temporali, il coefficiente di Pearson può essere scritto come
+
+\[
+\rho_{X,Y}
+=
+\frac{
+\sum_{i=1}^{N}(X_i-\bar{X})(Y_i-\bar{Y})
+}{
+\sqrt{\sum_{i=1}^{N}(X_i-\bar{X})^2}
+\sqrt{\sum_{i=1}^{N}(Y_i-\bar{Y})^2}
+}.
+\]
+
+Il valore di \(\rho\) appartiene all'intervallo \([-1,1]\). Se \(\rho\) è vicino
+a \(1\), le due serie tendono a muoversi nella stessa direzione. Se \(\rho\) è
+vicino a \(-1\), tendono a muoversi in direzioni opposte. Se \(\rho\) è vicino
+a \(0\), non emerge una relazione lineare significativa.
+
+La variabile \texttt{volume-correlation-history} conserva lo storico dei valori
+di correlazione calcolati nel tempo, mentre \texttt{mean-volume-correlation}
+memorizza una correlazione media. Infine,
+\texttt{above-threshold-counter} conta per quanti tick consecutivi la
+correlazione rimane sopra la soglia \texttt{pearson-threshold}. Questa variabile
+è utile per evitare decisioni basate su oscillazioni momentanee: il modello può
+richiedere che la correlazione rimanga alta per più passi temporali prima di
+modificare il proprio regime dinamico.
+
+Una struttura analoga viene usata per i prezzi:
+
+\[
+\texttt{model-price-history},
+\quad
+\texttt{real-price-history},
+\quad
+\texttt{price-correlation},
+\quad
+\texttt{price-correlation-history},
+\quad
+\texttt{mean-price-correlation}.
+\]
+
+In questo caso il confronto non riguarda i volumi, ma i prezzi. La variabile
+\texttt{model-price-history} conserva la serie storica dei prezzi endogeni
+prodotti dal modello, mentre \texttt{real-price-history} conserva la serie dei
+prezzi reali di Bitcoin. La variabile \texttt{price-correlation} misura la
+correlazione di Pearson tra queste due serie.
+
+Il confronto tra prezzo simulato e prezzo reale permette di valutare se la
+dinamica interna del modello riesce a riprodurre, almeno in parte, l'andamento
+osservato nel mercato reale. Anche in questo caso è importante ricordare che una
+correlazione elevata non implica causalità: indica soltanto che le due serie
+tendono a muoversi in modo linearmente simile.
+
+Le ultime variabili globali sono
+
+\[
+\texttt{op-history},
+\quad
+\texttt{ya-history},
+\quad
+\texttt{yb-history},
+\quad
+\texttt{lambda-instability},
+\quad
+\texttt{heterogeneity-index-value},
+\quad
+\texttt{phase-correlation-ab}.
+\]
+
+La variabile \texttt{op-history} può essere interpretata come lo storico del
+parametro d'ordine. Il parametro d'ordine misura il grado di allineamento
+collettivo degli agenti: valori vicini a \(1\) indicano un sistema molto
+allineato, mentre valori vicini a \(0\) indicano un sistema disordinato.
+
+Le variabili \texttt{ya-history} e \texttt{yb-history} memorizzano storici legati
+alle coordinate verticali o alle dinamiche medie di specifiche specie di agenti.
+Poiché nel modello la coordinata \(y\) può essere associata alla propensione ad
+acquistare o vendere, questi storici possono essere utilizzati per studiare
+l'evoluzione comportamentale dei gruppi.
+
+La variabile \texttt{lambda-instability} rappresenta una misura di instabilità
+del sistema. Il simbolo \(\lambda\) viene spesso usato per indicare un parametro
+che misura l'intensità di una crescita, di una divergenza o di una sensibilità
+dinamica. Nel contesto del modello, questa variabile può essere usata per
+quantificare quanto il sistema sia stabile o instabile nel tempo.
+
+La variabile \texttt{heterogeneity-index-value} rappresenta un indice di
+eterogeneità. L'eterogeneità misura quanto gli agenti o i gruppi differiscono tra
+loro. Un valore elevato può indicare che specie diverse assumono comportamenti
+molto differenti, mentre un valore basso può indicare una maggiore omogeneità
+della popolazione.
+
+Infine, \texttt{phase-correlation-ab} misura una correlazione di fase tra le
+specie \texttt{agents-a} e \texttt{agents-b}. In termini qualitativi, questa
+grandezza può indicare se due gruppi oscillano o si muovono in modo coordinato,
+oppure se seguono dinamiche sfasate.
+
+Il blocco \texttt{turtles-own} dichiara invece le variabili individuali degli
+agenti:
+
+\[
+\texttt{flockmates},
+\quad
+\texttt{bitcoin-held},
+\quad
+\texttt{cash-balance},
+\quad
+\texttt{velocity-x},
+\quad
+\texttt{velocity-y}.
+\]
+
+A differenza delle variabili globali, queste variabili appartengono
+separatamente a ciascun agente. Ogni turtle possiede quindi un proprio valore di
+\texttt{bitcoin-held}, un proprio valore di \texttt{cash-balance} e così via.
+
+La variabile \texttt{flockmates} contiene l'insieme degli agenti vicini con cui
+la turtle interagisce nella regola di flocking. Essa è fondamentale per
+l'allineamento locale, perché permette a ogni agente di individuare i vicini
+rispetto ai quali aggiornare la propria direzione.
+
+La variabile \texttt{bitcoin-held} indica quanti Bitcoin sono posseduti da un
+agente. Essa rappresenta quindi la posizione dell'agente sull'attività
+finanziaria. La variabile \texttt{cash-balance} rappresenta invece la liquidità
+disponibile, cioè la quantità di denaro che l'agente può usare per acquistare
+Bitcoin
+
+\subsection{Helper per la gestione sicura delle penne dei plot}
+
+\begin{lstlisting}[caption={Procedura di controllo e creazione delle penne dei plot}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; HELPER PER PLOT SICURI
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to assicura-penna [ nome-penna colore ]
+  carefully [
+    set-current-plot-pen nome-penna
+  ] [
+    create-temporary-plot-pen nome-penna
+    set-plot-pen-color colore
+  ]
+end
+\end{lstlisting}
+
+La procedura \texttt{assicura-penna} è una procedura di supporto pensata per
+rendere più robusta la gestione dei grafici. Essa riceve due argomenti:
+
+\[
+\texttt{nome-penna},
+\qquad
+\texttt{colore}.
+\]
+
+Il primo indica il nome della penna del plot che si vuole utilizzare, mentre il
+secondo indica il colore da assegnare alla penna nel caso in cui questa debba
+essere creata.
+
+Il blocco principale è costruito tramite il comando
+
+\[
+\texttt{carefully [ ... ] [ ... ]}.
+\]
+
+In NetLogo, \texttt{carefully} permette di provare a eseguire un blocco di
+codice e, se questo genera un errore, eseguire un secondo blocco alternativo.
+In questo caso, il modello prova prima a selezionare una penna già esistente:
+
+\[
+\texttt{set-current-plot-pen nome-penna}.
+\]
+
+Se la penna esiste, viene semplicemente selezionata. Se invece non esiste,
+NetLogo genererebbe normalmente un errore. Grazie a \texttt{carefully}, tale
+errore viene intercettato e viene eseguito il blocco alternativo:
+
+\[
+\texttt{create-temporary-plot-pen nome-penna}
+\]
+
+seguito da
+
+\[
+\texttt{set-plot-pen-color colore}.
+\]
+
+In questo modo, se la penna richiesta non è già presente nel plot, viene creata
+automaticamente e le viene assegnato il colore specificato.
+
+Questa procedura è utile quando il modello aggiorna molti grafici o molte curve
+diverse. Invece di dover creare manualmente tutte le penne dall'interfaccia di
+NetLogo, il codice controlla automaticamente se una penna esiste e, se manca, la
+crea. Questo rende i plot più flessibili e riduce il rischio di errori dovuti a
+nomi di penne non ancora definiti.
+
+\subsection{Inizializzazione del portafoglio degli agenti}
+
+\begin{lstlisting}[caption={Procedura di inizializzazione del portafoglio individuale}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; INIZIALIZZAZIONE PORTAFOGLIO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to inizializza-portafoglio
+  set bitcoin-held random 6
+  set cash-balance 50000 + random 1450001
+end
+\end{lstlisting}
+
+La procedura \texttt{inizializza-portafoglio} assegna a ogni agente una dotazione
+finanziaria iniziale. Essa viene normalmente richiamata durante la creazione
+degli agenti nella procedura \texttt{setup}.
+
+La prima istruzione è
+
+\[
+\texttt{set bitcoin-held random 6}.
+\]
+
+La variabile \texttt{bitcoin-held} rappresenta il numero di Bitcoin posseduti
+dall'agente. Il comando \texttt{random 6} genera un numero intero casuale tra
+\(0\) e \(5\). Di conseguenza, ogni agente inizia la simulazione con una quantità
+casuale di Bitcoin compresa nell'intervallo
+
+\[
+[0,5].
+\]
+
+La seconda istruzione è
+
+\[
+\texttt{set cash-balance 50000 + random 1450001}.
+\]
+
+La variabile \texttt{cash-balance} rappresenta la liquidità disponibile
+dell'agente, cioè la quantità di denaro che può essere usata per effettuare
+acquisti. Il termine \texttt{random 1450001} genera un numero intero casuale tra
+\(0\) e \(1\,450\,000\). Sommando \(50\,000\), si ottiene una liquidità iniziale
+compresa tra
+
+\[
+50\,000
+\quad \text{e} \quad
+1\,500\,000.
+\]
+
+Questa inizializzazione introduce eterogeneità economica tra gli agenti: alcuni
+partono con molti Bitcoin e molta liquidità, altri con meno disponibilità.
+
+Dal punto di vista economico, il portafoglio di un agente è composto da due
+elementi: una parte detenuta in Bitcoin e una parte detenuta in liquidità. La
+liquidità indica la capacità immediata di acquistare nuovi Bitcoin, mentre
+\texttt{bitcoin-held} indica la quantità dell'attività finanziaria già posseduta.
+Questa distinzione è necessaria per impedire operazioni non realistiche, come
+comprare senza denaro disponibile o vendere Bitcoin non posseduti.
+
+\subsection{Posizionamento iniziale degli agenti in una regione centrale}
+
+\begin{lstlisting}[caption={Procedura di spawn circolare centrale}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; SPAWN CIRCOLARE CENTRALE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to posiziona-al-centro
+  let angolo random-float 360
+  let raggio random-float spawn-radius
+
+  setxy (raggio * cos angolo)
+        (raggio * sin angolo)
+end
+\end{lstlisting}
+
+La procedura \texttt{posiziona-al-centro} assegna a ogni agente una posizione
+iniziale casuale all'interno di una regione circolare centrata nell'origine del
+mondo NetLogo. Essa viene utilizzata al momento della creazione degli agenti, in
+modo che la popolazione non venga distribuita casualmente in tutto lo spazio, ma
+nasca inizialmente in una zona centrale controllata.
+
+La variabile locale
+
+\[
+\texttt{angolo}
+\]
+
+viene definita tramite
+
+\[
+\texttt{let angolo random-float 360}.
+\]
+
+Il comando \texttt{random-float 360} genera un numero reale casuale compreso tra
+\(0\) e \(360\). Questo valore rappresenta l'angolo polare della posizione
+iniziale dell'agente. In altre parole, stabilisce la direzione, rispetto
+all'origine, lungo la quale verrà collocato l'agente.
+
+La variabile locale
+
+\[
+\texttt{raggio}
+\]
+
+viene invece definita tramite
+
+\[
+\texttt{let raggio random-float spawn-radius}.
+\]
+
+Il parametro \texttt{spawn-radius} controlla la dimensione della regione iniziale
+di spawn. Il comando \texttt{random-float spawn-radius} genera un raggio casuale
+compreso tra \(0\) e \texttt{spawn-radius}. Quindi gli agenti vengono collocati
+entro un disco di raggio massimo \texttt{spawn-radius}.
+
+La posizione cartesiana viene poi ottenuta a partire dalle coordinate polari:
+
+\[
+x = r \cos(\theta),
+\qquad
+y = r \sin(\theta).
+\]
+
+Nel codice NetLogo questa trasformazione è implementata da
+
+\[
+\texttt{setxy (raggio * cos angolo) (raggio * sin angolo)}.
+\]
+
+Il comando \texttt{setxy} assegna simultaneamente la coordinata \(x\) e la
+coordinata \(y\) dell'agente. Poiché il centro del disco è l'origine, non è
+necessario aggiungere alcuna traslazione alle coordinate.
+
+Dal punto di vista modellistico, questa procedura permette di studiare
+l'evoluzione di un gruppo inizialmente concentrato. Gli agenti partono da una
+regione comune e successivamente si disperdono, si allineano o si separano in
+base alle regole di flocking, repulsione, corrente e trading definite nel
+modello.
+
+\subsection{Procedura di inizializzazione del modello: \texttt{setup}}
+
+\begin{lstlisting}[caption={Procedura di setup del modello}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; SETUP
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to setup
+
+  clear-all
+
+  carefully [
+    import-drawing "grafico_buy_sell.png"
+  ] [ ]
+
+  ;; GARANZIA SOGLIA PEARSON VALIDA DA SLIDER
+  if not is-number? pearson-threshold [
+    set pearson-threshold 0.5
+  ]
+
+  set current-disabled? false    ;; Inizia sempre in Fase 1
+  set current-hype 0
+
+  if is-number? price-sensitivity = false [
+    set price-sensitivity 0.01
+  ]
+
+  set day-index 0
+  set btc-prev-price 0
+  set btc-price 0
+  set btc-initial-price 0
+  set btc-ath-price 0
+  set btc-return 0
+  set btc-volatility 0
+
+  set model-price 0
+  set model-return 0
+  set model-volatility 0
+
+  set model-trading-volume 0
+  set real-trading-volume-usd 0
+  set real-volume-initial 0
+  set real-volume-ath 0
+  set volume-hysteresis-state 0
+
+  ;; INIZIALIZZAZIONE CORRELAZIONE VOLUMI
+  set volume-correlation 0
+  set volume-correlation-history []
+  set mean-volume-correlation 0
+  set above-threshold-counter 0
+
+  ;; INIZIALIZZAZIONE CORRELAZIONE PREZZI
+  set model-price-history []
+  set real-price-history []
+  set price-correlation 0
+  set price-correlation-history []
+  set mean-price-correlation 0
+
+  set prices []
+  set model-volume-history []
+  set real-volume-history []
+
+  set op-history []
+  set ya-history []
+  set yb-history []
+
+  set lambda-instability 0
+  set heterogeneity-index-value 0
+  set phase-correlation-ab 0
+
+  if trade-interval <= 0 [
+    user-message "Attenzione: trade-interval deve essere > 0. Impostato a 1."
+    set trade-interval 1
+  ]
+
+  scarica-dati
+
+  ;; CREAZIONE AGENTI
+  create-agents-a population-a [
+    set color yellow
+    set size 10
+    posiziona-al-centro
+    set heading random 360
+    set velocity-x cos heading
+    set velocity-y sin heading
+    set flockmates no-turtles
+    inizializza-portafoglio
+  ]
+
+  create-agents-b population-b [
+    set color red
+    set size 10
+    posiziona-al-centro
+    set heading random 360
+    set velocity-x cos heading
+    set velocity-y sin heading
+    set flockmates no-turtles
+    inizializza-portafoglio
+  ]
+
+  create-agents-c population-c [
+    set color cyan
+    set size 10
+    posiziona-al-centro
+    set heading random 360
+    set velocity-x cos heading
+    set velocity-y sin heading
+    set flockmates no-turtles
+    inizializza-portafoglio
+  ]
+
+  ;; RETE FISSA
+  ask agents-a [
+    let n min (list number-of-followers (count other agents-a))
+    if n > 0 [ set flockmates n-of n other agents-a ]
+  ]
+
+  ask agents-b [
+    let n min (list number-of-followers (count other agents-b))
+    if n > 0 [ set flockmates n-of n other agents-b ]
+  ]
+
+  ask agents-c [
+    let n min (list number-of-followers (count other agents-c))
+    if n > 0 [ set flockmates n-of n other agents-c ]
+  ]
+
+  ;; INIZIALIZZAZIONE PRIMO GIORNO REALE E MODELLO
+  if is-list? prices and length prices > 0 [
+    let record item 0 prices
+    set btc-price item 1 record
+    set btc-prev-price btc-price
+    set btc-initial-price btc-price
+    set btc-ath-price btc-price
+    set day-index 1
+  ]
+
+  set model-price btc-price
+  set model-return 0
+  set model-volatility 0
+
+  print (word "=== SETUP COMPLETATO ===")
+  print (word "FASE 1 ATTIVA - Switch automatico a Fase 2 quando r_medio(volumi) >= " pearson-threshold " per piu' di 5 tick consecutivi.")
+
+  reset-ticks
+
+end
+\end{lstlisting}
+
+La procedura \texttt{setup} inizializza l'intero modello e prepara sia la parte
+finanziaria sia la parte agent-based della simulazione. Il comando
+\texttt{clear-all} elimina lo stato precedente del modello, cancellando agenti,
+plot, variabili temporanee e configurazioni residue. In questo modo ogni nuova
+esecuzione parte da una condizione pulita.
+
+Subito dopo, il codice prova a importare l'immagine
+\texttt{grafico\_buy\_sell.png} tramite il blocco
+
+\[
+\texttt{carefully [ import-drawing ... ] [ ]}
+\]
+
+Il comando \texttt{carefully} permette di evitare che il modello si blocchi nel
+caso in cui il file immagine non sia presente. Se l'importazione fallisce, il
+secondo blocco vuoto viene eseguito e la simulazione continua comunque.
+
+La parte successiva controlla che alcuni parametri dell'interfaccia abbiano
+valori numerici validi. In particolare, \texttt{pearson-threshold} viene impostato
+a \(0.5\) se non è un numero. Questa variabile rappresenta la soglia di
+correlazione di Pearson richiesta per considerare sufficientemente simili due
+serie temporali, ad esempio i volumi reali e i volumi generati dal modello.
+Analogamente, \texttt{price-sensitivity} viene impostata a \(0.01\) se non è
+definita correttamente. Tale parametro controlla quanto il prezzo endogeno del
+modello reagisce agli squilibri generati dagli agenti.
+
+La variabile \texttt{current-disabled?} viene inizializzata a \texttt{false}.
+Questo indica che, all'inizio, la corrente esterna è attiva. Il commento specifica
+che il modello parte sempre dalla \emph{Fase 1}, cioè da una fase in cui il
+sistema è ancora guidato, almeno in parte, dai dati reali. La variabile
+\texttt{current-hype} viene posta a zero e rappresenta il livello iniziale di
+hype o stress di mercato.
+
+Segue l'inizializzazione delle variabili relative al mercato reale di Bitcoin:
+\texttt{btc-price}, \texttt{btc-prev-price}, \texttt{btc-initial-price},
+\texttt{btc-ath-price}, \texttt{btc-return} e \texttt{btc-volatility}. Il prezzo
+di Bitcoin rappresenta il valore dell'attività finanziaria nel tempo; il
+rendimento misura la variazione relativa del prezzo tra due istanti consecutivi;
+la volatilità misura invece l'intensità delle variazioni di prezzo. Il valore
+\texttt{btc-ath-price} memorizza il massimo prezzo raggiunto nella finestra di
+osservazione considerata.
+
+Vengono poi inizializzate le variabili endogene del modello:
+\texttt{model-price}, \texttt{model-return} e \texttt{model-volatility}. A
+differenza delle variabili precedenti, queste non provengono direttamente dai
+dati reali, ma sono generate dalla dinamica interna della simulazione. Il prezzo
+endogeno è quindi il prezzo prodotto dal comportamento degli agenti.
+
+La procedura azzera anche le variabili relative ai volumi:
+\texttt{model-trading-volume}, \texttt{real-trading-volume-usd},
+\texttt{real-volume-initial}, \texttt{real-volume-ath} e
+\texttt{volume-hysteresis-state}. In economia, il volume di scambio misura la
+quantità o il controvalore di un'attività comprata e venduta in un certo
+intervallo di tempo. Nel modello si distinguono i volumi reali, provenienti dal
+mercato, e i volumi endogeni, generati dagli scambi degli agenti.
+
+Le liste storiche e le variabili di correlazione vengono inizializzate come liste
+vuote o valori nulli. In particolare, \texttt{model-volume-history} e
+\texttt{real-volume-history} conterranno gli storici dei volumi simulati e reali,
+mentre \texttt{model-price-history} e \texttt{real-price-history} conterranno gli
+storici dei prezzi. Le variabili \texttt{volume-correlation} e
+\texttt{price-correlation} misureranno la correlazione di Pearson tra le serie
+simulate e quelle reali. Il contatore \texttt{above-threshold-counter} serve a
+verificare per quanti tick consecutivi la correlazione dei volumi rimane sopra
+la soglia fissata.
+
+La procedura inizializza anche alcune grandezze dinamiche legate al comportamento
+collettivo degli agenti: \texttt{op-history}, \texttt{ya-history},
+\texttt{yb-history}, \texttt{lambda-instability},
+\texttt{heterogeneity-index-value} e \texttt{phase-correlation-ab}. Queste
+variabili permettono di studiare il grado di ordine, l'instabilità, l'eterogeneità
+tra gruppi e la relazione di fase tra specie diverse.
+
+Prima di scaricare i dati, il codice controlla che \texttt{trade-interval} sia
+positivo. Questo parametro stabilisce ogni quante iterazioni avviene il trading.
+Se il valore è minore o uguale a zero, NetLogo mostra un messaggio di avviso e
+imposta automaticamente \texttt{trade-interval} a \(1\), evitando divisioni o
+condizioni temporali non valide.
+
+Il comando
+
+\[
+\texttt{scarica-dati}
+\]
+
+richiama la procedura che carica la serie dei prezzi reali di Bitcoin. Dopo il
+download, il modello crea le tre popolazioni di agenti:
+\texttt{agents-a}, \texttt{agents-b} e \texttt{agents-c}. Le tre specie vengono
+distinte tramite il colore: giallo, rosso e ciano. Ogni agente viene posizionato
+nella regione centrale tramite \texttt{posiziona-al-centro}, riceve una direzione
+iniziale casuale e le corrispondenti componenti di velocità:
+
+\[
+v_x = \cos(\theta),
+\qquad
+v_y = \sin(\theta),
+\]
+
+dove \(\theta\) è il valore di \texttt{heading}. Ogni agente viene inoltre
+inizializzato senza vicini di flocking e riceve un portafoglio iniziale tramite
+\texttt{inizializza-portafoglio}.
+
+La sezione denominata \emph{rete fissa} assegna a ciascun agente un insieme
+iniziale di \texttt{flockmates} appartenenti alla stessa specie. Per ogni gruppo,
+il numero di vicini scelti è il minimo tra \texttt{number-of-followers} e il
+numero effettivo di altri agenti disponibili nella stessa specie. Il comando
+\texttt{n-of} seleziona casualmente \(n\) agenti. In questo modo il flocking non
+dipende necessariamente da una vicinanza spaziale istantanea, ma da una rete di
+relazioni interne alla specie.
+
+Infine, se la lista \texttt{prices} contiene dati validi, il primo record viene
+usato per inizializzare il primo prezzo reale di Bitcoin. Il prezzo corrente,
+il prezzo precedente, il prezzo iniziale e il massimo iniziale vengono tutti
+posti uguali al primo prezzo disponibile. L'indice temporale \texttt{day-index}
+viene poi impostato a \(1\), così che l'aggiornamento successivo legga il record
+seguente.
+
+Il prezzo endogeno \texttt{model-price} viene inizializzato uguale al prezzo
+reale iniziale. Questa scelta permette al modello simulato di partire dallo stesso
+livello del mercato reale, rendendo più significativo il confronto successivo tra
+prezzo reale e prezzo generato dagli agenti.
+
+La procedura termina stampando alcuni messaggi informativi nella console e
+richiamando \texttt{reset-ticks}, che azzera il tempo della simulazione.
+
+\subsection{Hype di mercato e stubbornness dinamica}
+
+\begin{lstlisting}[caption={Calcolo dell'hype e della stubbornness dinamica}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; HYPE E STUBBORNNESS DINAMICA
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report calcola-hype
+  report (abs model-return) + model-volatility
+end
+
+to-report dynamic-stubbornness
+  let base-s 0.95
+  let min-s 0.05
+  let raw-s base-s - (hype-sensitivity * current-hype)
+  report max (list min-s (min (list base-s raw-s)))
+end
+\end{lstlisting}
+
+Questo blocco introduce due reporter legati alla reattività degli agenti rispetto
+alle condizioni del mercato simulato. Il primo reporter, \texttt{calcola-hype},
+definisce una misura sintetica dell'hype o stress di mercato:
+
+\[
+H(t)=|r_m(t)|+\sigma_m(t),
+\]
+
+dove \(r_m(t)\) è il rendimento del prezzo endogeno del modello e
+\(\sigma_m(t)\) è la volatilità endogena. Il termine \(|r_m(t)|\) misura
+l'intensità della variazione del prezzo, indipendentemente dal segno, mentre
+\texttt{model-volatility} rappresenta il grado di instabilità del prezzo
+simulato.
+
+Dal punto di vista economico, l'hype può essere interpretato come una misura
+aggregata della tensione del mercato. Quando il prezzo cambia molto e la
+volatilità è elevata, il mercato viene considerato più instabile, più reattivo o
+più emotivamente carico. In questo senso, \texttt{current-hype} rappresenta una
+variabile comportamentale che traduce l'instabilità del prezzo in una maggiore
+sensibilità degli agenti.
+
+Il secondo reporter, \texttt{dynamic-stubbornness}, calcola una stubbornness
+dinamica, cioè una misura della tendenza degli agenti a conservare il proprio
+orientamento o comportamento precedente. Il valore di partenza è
+
+\[
+s_{\mathrm{base}}=0.95,
+\]
+
+mentre il valore minimo ammesso è
+
+\[
+s_{\min}=0.05.
+\]
+
+La quantità intermedia
+
+\[
+s_{\mathrm{raw}}
+=
+s_{\mathrm{base}}
+-
+\texttt{hype-sensitivity}\cdot \texttt{current-hype}
+\]
+
+riduce la stubbornness quando aumenta l'hype di mercato. Quindi, in condizioni
+di mercato calme, gli agenti rimangono più stabili e meno reattivi; in condizioni
+di mercato stressato, diventano più sensibili e più disposti a modificare il loro
+stato.
+
+L'ultima riga,
+
+\[
+\texttt{report max (list min-s (min (list base-s raw-s)))},
+\]
+
+impone che la stubbornness resti sempre compresa tra \texttt{min-s} e
+\texttt{base-s}. In forma matematica:
+
+\[
+s(t)=
+\max
+\left[
+s_{\min},
+\min
+\left(
+s_{\mathrm{base}},
+s_{\mathrm{raw}}(t)
+\right)
+\right].
+\]
+
+Questa limitazione evita valori non realistici: la stubbornness non può superare
+il valore massimo iniziale e non può scendere sotto una soglia minima.
+
+\subsection{Pipeline dinamica della simulazione}
+
+\begin{lstlisting}[caption={Procedura principale \texttt{go}}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GO (PIPELINE)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to go
+
+  set model-trading-volume 0
+
+  ;; 1. AGGIORNAMENTO PREZZO E DATI REALI
+  if (ticks mod trade-interval = 0) [
+
+    if ticks > 0 [
+      aggiorna-dati
+    ]
+
+    aggiorna-prezzo-modello
+  ]
+
+  ;; 2. AGGIORNAMENTO STATO E MOVIMENTO FISICO
+  set current-hype calcola-hype
+
+  ask turtles [
+    flock
+    repel-different-breeds
+    swim
+  ]
+
+  ;; 3. TRADING, CORRELAZIONI E PLOT
+  if (ticks mod trade-interval = 0) [
+    ask turtles [
+      compravendita-bitcoin
+    ]
+
+    aggiorna-storico-volumi
+    aggiorna-correlazione-prezzi
+
+    aggiorna-plot-prezzi-e-volume
+    aggiorna-plot-correlazione-volumi
+    aggiorna-plot-correlazione-prezzi
+  ]
+
+  aggiorna-metriche-stabilita
+  aggiorna-plot-parametri
+
+  tick
+
+end
+\end{lstlisting}
+
+La procedura \texttt{go} rappresenta il ciclo dinamico principale del modello.
+Ogni sua esecuzione corrisponde a un passo temporale della simulazione, ma non
+tutte le componenti del modello vengono aggiornate con la stessa frequenza.
+Il movimento degli agenti avviene a ogni tick, mentre il mercato, il trading e
+alcuni grafici vengono aggiornati solo ogni \texttt{trade-interval} iterazioni.
+
+All'inizio della procedura viene azzerata la variabile
+
+\[
+\texttt{model-trading-volume}.
+\]
+
+Questa variabile misura il volume di scambio generato dagli agenti nel tick
+corrente. Azzerarla all'inizio di ogni ciclo permette di registrare soltanto le
+operazioni avvenute nel nuovo passo temporale, evitando che il volume si accumuli
+indefinitamente nel tempo.
+
+La prima parte della pipeline riguarda l'aggiornamento dei dati di mercato:
+
+\[
+\texttt{if (ticks mod trade-interval = 0) [ ... ]}.
+\]
+
+La condizione
+
+\[
+\texttt{ticks mod trade-interval = 0}
+\]
+
+verifica se il numero corrente di tick è multiplo di \texttt{trade-interval}.
+In questo modo, il modello separa la dinamica continua del movimento dalla
+dinamica discreta del mercato: gli agenti possono muoversi molte volte prima che
+avvenga un nuovo aggiornamento di prezzo e trading.
+
+All'interno di questo blocco, la procedura \texttt{aggiorna-dati} viene chiamata
+solo se \texttt{ticks > 0}. Questa scelta evita di aggiornare immediatamente i
+dati reali al tick iniziale, dato che il primo prezzo è già stato inizializzato
+nella procedura \texttt{setup}. Successivamente viene chiamata
+
+\[
+\texttt{aggiorna-prezzo-modello},
+\]
+
+che aggiorna il prezzo endogeno generato dal modello. Il prezzo endogeno è il
+prezzo prodotto internamente dalla simulazione, a partire dal comportamento degli
+agenti, e si distingue dal prezzo reale di Bitcoin, che proviene invece dalla
+serie storica esterna.
+
+La seconda parte della procedura aggiorna lo stato comportamentale e il movimento
+fisico degli agenti. La riga
+
+\[
+\texttt{set current-hype calcola-hype}
+\]
+
+calcola il livello corrente di hype o stress di mercato. Questa grandezza dipende
+dal rendimento e dalla volatilità del prezzo endogeno. Dal punto di vista
+economico, un mercato con alto hype è un mercato più instabile, in cui gli
+agenti possono diventare più reattivi e meno conservativi nelle proprie scelte.
+
+Successivamente, tutti gli agenti eseguono tre procedure:
+
+\[
+\texttt{flock},
+\qquad
+\texttt{repel-different-breeds},
+\qquad
+\texttt{swim}.
+\]
+
+La procedura \texttt{flock} aggiorna il comportamento di allineamento collettivo,
+facendo sì che gli agenti tendano a coordinarsi con i propri vicini o follower.
+La procedura \texttt{repel-different-breeds} introduce invece una repulsione tra
+agenti appartenenti a specie diverse, impedendo una sovrapposizione eccessiva tra
+gruppi distinti. Infine, \texttt{swim} aggiorna il movimento effettivo degli
+agenti nello spazio.
+
+La terza parte della pipeline riguarda trading, correlazioni e grafici. Anche
+questa sezione viene eseguita solo ogni \texttt{trade-interval} tick. Gli agenti
+eseguono la procedura
+
+\[
+\texttt{compravendita-bitcoin},
+\]
+
+che determina se comprare o vendere Bitcoin in base alla posizione nello spazio,
+alla probabilità di scambio e ai vincoli di portafoglio. Gli agenti non possono
+comprare se non hanno liquidità sufficiente e non possono vendere Bitcoin che non
+possiedono.
+
+Dopo le operazioni di trading, il modello aggiorna lo storico dei volumi tramite
+
+\[
+\texttt{aggiorna-storico-volumi}
+\]
+
+e la correlazione tra prezzi reali e prezzi simulati tramite
+
+\[
+\texttt{aggiorna-correlazione-prezzi}.
+\]
+
+La correlazione di Pearson misura quanto due serie temporali si muovono in modo
+linearmente simile. In questo contesto viene usata per confrontare la dinamica
+del modello con quella del mercato reale.
+
+Le procedure
+
+\[
+\texttt{aggiorna-plot-prezzi-e-volume},
+\qquad
+\texttt{aggiorna-plot-correlazione-volumi},
+\qquad
+\texttt{aggiorna-plot-correlazione-prezzi}
+\]
+
+aggiornano i grafici relativi all'andamento del prezzo, dei volumi e delle
+correlazioni. Poiché questi grafici dipendono da quantità di mercato, vengono
+aggiornati solo quando avviene anche l'aggiornamento del trading.
+
+Al di fuori del blocco temporizzato, il modello aggiorna invece le metriche di
+stabilità e i parametri collettivi:
+
+\[
+\texttt{aggiorna-metriche-stabilita},
+\qquad
+\texttt{aggiorna-plot-parametri}.
+\]
+
+Queste procedure vengono eseguite a ogni tick, perché dipendono dalla dinamica
+continua degli agenti e non soltanto dagli eventi di mercato. Possono quindi
+monitorare in modo più fine l'evoluzione del flocking, dell'ordine collettivo,
+dell'eterogeneità e dell'instabilità.
+
+Infine, il comando
+
+\[
+\texttt{tick}
+\]
+
+fa avanzare il tempo della simulazione di una unità. La struttura complessiva
+della procedura può quindi essere riassunta come
+
+\[
+\text{mercato periodico}
+\;\longrightarrow\;
+\text{hype e movimento}
+\;\longrightarrow\;
+\text{trading periodico}
+\;\longrightarrow\;
+\text{metriche e plot}
+\;\longrightarrow\;
+\text{avanzamento temporale}.
+\]
+
+Questa organizzazione consente di rappresentare un sistema in cui gli agenti si
+muovono continuamente, mentre le decisioni di mercato e gli aggiornamenti dei
+prezzi avvengono con una frequenza più bassa e controllata.
+
+\subsection{Stima del prezzo del modello: fase reale e fase endogena}
+
+\begin{lstlisting}[caption={Procedura di aggiornamento del prezzo del modello}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; FUNZIONE DI STIMA DEL PREZZO MODELLO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to aggiorna-prezzo-modello
+
+  ifelse (not current-disabled?) [
+
+    ;; FASE 1: COPIA REALE
+    set model-price btc-price
+    set model-return btc-return
+    set model-volatility btc-volatility
+
+    print (word "[FASE 1 - PREZZO REALE] Giorno: " day-index " | Correlazione Media Volumi: " precision mean-volume-correlation 2)
+
+  ] [
+
+    ;; FASE 2: PREZZO ENDOGENO
+    if count turtles > 0 [
+      let mean-y mean [ycor] of turtles
+      let max-y max-pycor
+
+      let market-pressure (mean-y / max-y)
+
+      let prev-m-price model-price
+      set model-price max (list 1 (model-price * (1 + (price-sensitivity * market-pressure))))
+
+      ifelse prev-m-price > 0 [
+        set model-return (model-price - prev-m-price) / prev-m-price
+        set model-volatility max (list 0.005 (abs model-return))
+      ] [
+        set model-return 0
+        set model-volatility 0.005
+      ]
+    ]
+
+    print (word ">>> [FASE 2 - PREZZO ENDOGENO] Giorno: " day-index " | Prezzo Stimato: " precision model-price 2)
+  ]
+
+  ;; Tracciamento continuo dell'ATH sia in Fase 1 che in Fase 2
+  if model-price > btc-ath-price [
+    set btc-ath-price model-price
+  ]
+
+end
+\end{lstlisting}
+
+La procedura \texttt{aggiorna-prezzo-modello} stabilisce come viene determinato
+il prezzo utilizzato internamente dalla simulazione. Il codice distingue due
+regimi dinamici: una prima fase in cui il modello segue direttamente il mercato
+reale e una seconda fase in cui il prezzo viene prodotto endogenamente dagli
+agenti.
+
+La condizione
+
+\[
+\texttt{ifelse (not current-disabled?) [ ... ] [ ... ]}
+\]
+
+seleziona la fase attiva. Se \texttt{current-disabled?} è falso, la corrente
+esterna non è disattivata e il modello si trova nella Fase 1. In questa fase il
+prezzo del modello viene copiato dal prezzo reale di Bitcoin:
+
+\[
+P_m(t)=P_{BTC}(t).
+\]
+
+Nel codice questo corrisponde a
+
+\[
+\texttt{set model-price btc-price}.
+\]
+
+Allo stesso modo, anche rendimento e volatilità del modello vengono posti uguali
+a quelli reali:
+
+\[
+\texttt{model-return}=\texttt{btc-return},
+\qquad
+\texttt{model-volatility}=\texttt{btc-volatility}.
+\]
+
+Questa fase può essere interpretata come una fase di calibrazione o avvio, in
+cui il modello resta agganciato al mercato empirico. Dal punto di vista
+finanziario, il rendimento misura la variazione relativa del prezzo tra due
+istanti consecutivi:
+
+\[
+r(t)=\frac{P(t)-P(t-1)}{P(t-1)}.
+\]
+
+La volatilità misura invece l'intensità delle oscillazioni del prezzo. Nel
+modello viene usata come grandezza in grado di influenzare la dinamica degli
+agenti.
+
+Quando \texttt{current-disabled?} diventa vero, il modello entra nella Fase 2.
+In questa fase il prezzo non viene più copiato dal dato reale, ma viene stimato
+a partire dallo stato collettivo degli agenti. Il codice calcola innanzitutto la
+media delle coordinate verticali:
+
+\[
+\texttt{mean-y = mean [ycor] of turtles}.
+\]
+
+Nel modello, la coordinata \(y\) ha un significato comportamentale: valori
+positivi sono associati a una maggiore propensione all'acquisto, mentre valori
+negativi sono associati a una maggiore propensione alla vendita. La media
+\(\bar{y}\) fornisce quindi una misura aggregata del sentiment della popolazione.
+
+La pressione di mercato viene definita come
+
+\[
+\texttt{market-pressure = mean-y / max-y}.
+\]
+
+In forma matematica:
+
+\[
+M(t)=\frac{\bar{y}(t)}{y_{\max}}.
+\]
+
+Se \(M(t)>0\), gli agenti sono mediamente nella regione di acquisto e il modello
+produce una pressione rialzista sul prezzo. Se \(M(t)<0\), gli agenti sono
+mediamente nella regione di vendita e il modello produce una pressione ribassista.
+
+Il prezzo endogeno viene aggiornato secondo la regola
+
+\[
+P_m(t+1)
+=
+P_m(t)
+\left[
+1+\alpha M(t)
+\right],
+\]
+
+dove \(\alpha\) è rappresentato da \texttt{price-sensitivity}. Nel codice:
+
+\[
+\texttt{model-price * (1 + (price-sensitivity * market-pressure))}.
+\]
+
+La funzione
+
+\[
+\texttt{max (list 1 ...)}
+\]
+
+impone un limite inferiore pari a \(1\), evitando che il prezzo stimato diventi
+zero o negativo. Questa scelta è coerente con l'interpretazione economica del
+prezzo: il prezzo di un'attività finanziaria non dovrebbe assumere valori
+negativi.
+
+Dopo l'aggiornamento del prezzo, il codice calcola il rendimento endogeno:
+
+\[
+r_m(t)=\frac{P_m(t)-P_m(t-1)}{P_m(t-1)}.
+\]
+
+Nel codice:
+
+\[
+\texttt{set model-return (model-price - prev-m-price) / prev-m-price}.
+\]
+
+La volatilità endogena viene quindi posta uguale al valore assoluto del
+rendimento, ma con una soglia minima:
+
+\[
+\sigma_m(t)=\max(0.005, |r_m(t)|).
+\]
+
+La soglia \(0.005\) rappresenta una volatilità di fondo. Essa evita che la
+volatilità diventi esattamente nulla e impedisce che eventuali meccanismi
+dipendenti dalla volatilità, come la corrente del modello, si spengano
+completamente.
+
+Infine, la procedura aggiorna il massimo prezzo raggiunto:
+
+\[
+\texttt{if model-price > btc-ath-price [ set btc-ath-price model-price ]}.
+\]
+
+La variabile \texttt{btc-ath-price} conserva quindi il massimo valore osservato
+del prezzo usato dal modello, sia durante la fase agganciata al prezzo reale sia
+durante la fase endogena. La sigla ATH indica \textit{All-Time High}, cioè il
+massimo storico o massimo raggiunto nella finestra di simulazione considerata.
+
+Questa procedura è centrale perché realizza il passaggio da un modello guidato
+dai dati reali a un modello autonomo. Nella prima fase il mercato reale fornisce
+il riferimento principale; nella seconda fase, invece, il prezzo emerge dallo
+stato collettivo degli agenti e dalla loro distribuzione nello spazio
+comportamentale.
+
+\subsection{Corrente dinamica nelle due fasi del modello}
+
+\begin{lstlisting}[caption={Componenti della corrente nelle fasi reale ed endogena}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CORRENTE -- COMPONENTE X (DINAMICA FASE 1 / FASE 2)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report my-current-x
+  let active-vol (ifelse-value (not current-disabled?) [ btc-volatility ] [ model-volatility ])
+  report k * active-vol
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CORRENTE -- COMPONENTE Y (DINAMICA FASE 1 / FASE 2)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report my-current-y
+  let active-ret (ifelse-value (not current-disabled?) [ btc-return ] [ model-return ])
+
+  ifelse breed = agents-a [
+    report h * active-ret
+  ] [
+    ifelse breed = agents-b [
+      report (- h * active-ret)
+    ] [
+      report 0
+    ]
+  ]
+end
+\end{lstlisting}
+
+Queste due procedure definiscono la corrente esterna che agisce sugli agenti.
+La corrente è divisa in due componenti:
+
+\[
+J_x,
+\qquad
+J_y.
+\]
+
+La componente orizzontale è calcolata dal reporter \texttt{my-current-x}, mentre
+la componente verticale è calcolata da \texttt{my-current-y}. Entrambe le
+componenti dipendono dalla fase dinamica in cui si trova il modello.
+
+La riga
+
+\[
+\texttt{let active-vol (ifelse-value (not current-disabled?) [ btc-volatility ] [ model-volatility ])}
+\]
+
+seleziona quale volatilità usare. Se \texttt{current-disabled?} è falso, il
+modello si trova nella Fase 1 e usa la volatilità reale di Bitcoin,
+\texttt{btc-volatility}. Se invece \texttt{current-disabled?} è vero, il modello
+si trova nella Fase 2 e usa la volatilità endogena, \texttt{model-volatility}.
+
+La componente orizzontale della corrente è quindi
+
+\[
+J_x(t)=k\,\sigma(t),
+\]
+
+dove \(k\) è il parametro di intensità della corrente e \(\sigma(t)\) è la
+volatilità attiva, reale nella Fase 1 ed endogena nella Fase 2.
+
+Dal punto di vista economico, la volatilità misura l'intensità delle variazioni
+di prezzo. Una volatilità elevata descrive un mercato più instabile o turbolento.
+Nel modello, questa instabilità viene tradotta in una spinta orizzontale più
+forte sugli agenti. Poiché la coordinata \(x\) è collegata alla probabilità di
+trading, la corrente orizzontale può essere interpretata come un aumento della
+reattività degli agenti durante fasi di mercato più intense.
+
+Il reporter \texttt{my-current-y} definisce invece la componente verticale della
+corrente. In questo caso la grandezza rilevante non è la volatilità, ma il
+rendimento:
+
+\[
+r(t)=\frac{P(t)-P(t-1)}{P(t-1)}.
+\]
+
+La riga
+
+\[
+\texttt{let active-ret (ifelse-value (not current-disabled?) [ btc-return ] [ model-return ])}
+\]
+
+sceglie il rendimento reale nella Fase 1 e il rendimento endogeno nella Fase 2.
+
+La componente verticale dipende anche dalla specie dell'agente. Per gli agenti
+della specie \texttt{agents-a}, il codice restituisce
+
+\[
+J_y^{(A)}(t)=h\,r(t),
+\]
+
+mentre per gli agenti della specie \texttt{agents-b} restituisce
+
+\[
+J_y^{(B)}(t)=-h\,r(t).
+\]
+
+Per gli agenti della specie \texttt{agents-c}, invece, la componente verticale è
+nulla:
+
+\[
+J_y^{(C)}(t)=0.
+\]
+
+Il parametro \(h\) controlla l'intensità con cui il rendimento influenza il moto
+verticale degli agenti. Poiché nel modello la coordinata \(y\) distingue le zone
+comportamentali di acquisto e vendita, questa scelta assegna alle specie A e B
+una risposta opposta allo stesso segnale di mercato.
+
+Se il rendimento è positivo, gli agenti A vengono spinti verso l'alto, cioè verso
+la regione associata all'acquisto, mentre gli agenti B vengono spinti verso il
+basso, cioè verso la regione associata alla vendita. Se il rendimento è negativo,
+l'effetto si inverte. La specie C, invece, non riceve alcuna spinta verticale
+diretta dal rendimento e può essere interpretata come una popolazione più neutra
+rispetto alla direzione del mercato.
+
+Questa struttura consente di rappresentare tre categorie comportamentali
+differenti: una specie che segue il segnale di rendimento, una specie che reagisce
+in modo opposto e una specie neutrale. Il passaggio dalla Fase 1 alla Fase 2
+mantiene la stessa forma della corrente, ma cambia la sorgente del segnale:
+inizialmente il mercato reale guida la dinamica, successivamente il segnale viene
+prodotto dal mercato endogeno generato dagli agenti.
+
+\subsection{Movimento degli agenti con corrente, riflessione ai bordi e rumore}
+
+\begin{lstlisting}[caption={Procedura di movimento degli agenti}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; MOVIMENTO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to swim
+
+  set velocity-x velocity-x + my-current-x
+  set velocity-y velocity-y + my-current-y
+
+  let next-x xcor + velocity-x
+  let next-y ycor + velocity-y
+
+  if next-x > max-pxcor or next-x < min-pxcor [
+    set velocity-x (- velocity-x)
+    set next-x max (list min-pxcor (min (list max-pxcor next-x)))
+  ]
+
+  if next-y > max-pycor or next-y < min-pycor [
+    set velocity-y (- velocity-y)
+    set next-y max (list min-pycor (min (list max-pycor next-y)))
+  ]
+
+  setxy next-x next-y
+
+  let random-angle random-float (2 * temperature) - temperature
+  let old-vx velocity-x
+  let old-vy velocity-y
+
+  set velocity-x (old-vx * cos random-angle) - (old-vy * sin random-angle)
+  set velocity-y (old-vx * sin random-angle) + (old-vy * cos random-angle)
+
+  if velocity-x != 0 or velocity-y != 0 [
+    set heading atan velocity-x velocity-y
+  ]
+
+end
+\end{lstlisting}
+
+La procedura \texttt{swim} aggiorna il movimento degli agenti nello spazio. A
+differenza di una dinamica basata soltanto su \texttt{heading} e \texttt{fd}, qui
+ogni agente possiede una velocità vettoriale, descritta dalle due componenti
+
+\[
+v_x = \texttt{velocity-x},
+\qquad
+v_y = \texttt{velocity-y}.
+\]
+
+La prima parte della procedura aggiunge alla velocità dell'agente la corrente
+esterna del modello:
+
+\[
+\texttt{set velocity-x velocity-x + my-current-x},
+\]
+
+\[
+\texttt{set velocity-y velocity-y + my-current-y}.
+\]
+
+La corrente rappresenta l'effetto del mercato sul moto degli agenti. La
+componente orizzontale dipende dalla volatilità, mentre la componente verticale
+dipende dal rendimento e dalla specie dell'agente. In questo modo, l'andamento
+del mercato influenza direttamente la traiettoria degli agenti nello spazio
+comportamentale.
+
+Dopo l'aggiornamento della velocità, il codice calcola la posizione prevista al
+passo successivo:
+
+\[
+x_{\mathrm{next}} = x + v_x,
+\qquad
+y_{\mathrm{next}} = y + v_y.
+\]
+
+Nel codice:
+
+\[
+\texttt{let next-x xcor + velocity-x},
+\qquad
+\texttt{let next-y ycor + velocity-y}.
+\]
+
+La parte successiva gestisce le pareti riflettenti. Se la posizione prevista
+supera il bordo destro o sinistro del mondo, la componente orizzontale della
+velocità viene invertita:
+
+\[
+v_x \longrightarrow -v_x.
+\]
+
+Questo è implementato da
+
+\[
+\texttt{set velocity-x (- velocity-x)}.
+\]
+
+Successivamente, la posizione viene riportata all'interno dei limiti del mondo
+tramite
+
+\[
+\texttt{max (list min-pxcor (min (list max-pxcor next-x)))}.
+\]
+
+Questa istruzione forza \texttt{next-x} a rimanere compreso tra
+\texttt{min-pxcor} e \texttt{max-pxcor}. Lo stesso procedimento viene applicato
+alla componente verticale: se l'agente supera il bordo superiore o inferiore, la
+velocità verticale viene invertita,
+
+\[
+v_y \longrightarrow -v_y,
+\]
+
+e la coordinata \texttt{next-y} viene riportata dentro i limiti ammessi.
+
+Il comando
+
+\[
+\texttt{setxy next-x next-y}
+\]
+
+aggiorna quindi la posizione effettiva dell'agente.
+
+La seconda parte della procedura introduce una perturbazione casuale della
+direzione di moto. Viene generato un angolo casuale:
+
+\[
+\texttt{random-angle}
+\in
+[-\texttt{temperature}, \texttt{temperature}).
+\]
+
+Il parametro \texttt{temperature} controlla quindi l'intensità del rumore
+angolare. Valori bassi producono traiettorie più regolari; valori elevati
+rendono il moto più disordinato.
+
+La velocità viene poi ruotata usando la matrice di rotazione bidimensionale:
+
+\[
+\begin{pmatrix}
+v_x' \\
+v_y'
+\end{pmatrix}
+=
+\begin{pmatrix}
+\cos\theta & -\sin\theta \\
+\sin\theta & \cos\theta
+\end{pmatrix}
+\begin{pmatrix}
+v_x \\
+v_y
+\end{pmatrix}.
+\]
+
+Nel codice, questa rotazione è implementata dalle righe
+
+\[
+\texttt{set velocity-x (old-vx * cos random-angle) - (old-vy * sin random-angle)}
+\]
+
+e
+
+\[
+\texttt{set velocity-y (old-vx * sin random-angle) + (old-vy * cos random-angle)}.
+\]
+
+Infine, se la velocità non è nulla, il valore di \texttt{heading} viene
+aggiornato in modo coerente con la direzione del vettore velocità:
+
+\[
+\texttt{set heading atan velocity-x velocity-y}.
+\]
+
+In questo modo, la rappresentazione grafica dell'agente rimane allineata alla
+direzione effettiva del suo moto.
+
+Dal punto di vista modellistico, questa procedura combina tre effetti: la corrente
+generata dal mercato, la riflessione ai bordi del dominio e il rumore casuale.
+Il risultato è una dinamica in cui gli agenti sono spinti dal segnale finanziario,
+rimangono confinati nello spazio e mantengono una componente stocastica che può
+ostacolare o modificare l'emergere del flocking.
+
+\subsection{Probabilità di compravendita}
+
+\begin{lstlisting}[caption={Reporter per la probabilità di scambio}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PROBABILITA' DI COMPRAVENDITA
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report probabilita-scambio
+
+  let ampiezza-x (max-pxcor - min-pxcor)
+
+  if ampiezza-x = 0 [ report 0 ]
+
+  let p ((xcor - min-pxcor) / ampiezza-x)
+
+  report min (list 1 (max (list 0 p)))
+
+end
+\end{lstlisting}
+
+Il reporter \texttt{probabilita-scambio} assegna a ogni agente una probabilità
+di effettuare una compravendita in base alla sua posizione orizzontale nel mondo
+NetLogo.
+
+La variabile
+
+\[
+\texttt{ampiezza-x}
+=
+\texttt{max-pxcor} - \texttt{min-pxcor}
+\]
+
+rappresenta la larghezza totale del dominio lungo l'asse \(x\). Se tale ampiezza
+è nulla, il reporter restituisce direttamente \(0\), evitando una divisione per
+zero.
+
+La probabilità grezza viene poi calcolata come
+
+\[
+p =
+\frac{x - x_{\min}}{x_{\max} - x_{\min}}.
+\]
+
+Nel codice:
+
+\[
+\texttt{let p ((xcor - min-pxcor) / ampiezza-x)}.
+\]
+
+In questo modo, un agente vicino al bordo sinistro del mondo ha una probabilità
+di scambio prossima a \(0\), mentre un agente vicino al bordo destro ha una
+probabilità prossima a \(1\). La coordinata \(x\) viene quindi interpretata come
+una misura della propensione operativa dell'agente: più l'agente si trova verso
+destra, maggiore è la probabilità che partecipi al mercato.
+
+L'ultima riga,
+
+\[
+\texttt{report min (list 1 (max (list 0 p)))},
+\]
+
+serve a vincolare il valore finale nell'intervallo
+
+\[
+0 \leq p \leq 1.
+\]
+
+Questa operazione evita che eventuali valori numerici anomali producano
+probabilità negative o maggiori di uno. Il reporter restituisce quindi sempre
+un valore valido interpretabile come probabilità di compravendita.
+
+\subsection{Compravendita di Bitcoin}
+
+\begin{lstlisting}[caption={Procedura di compravendita di Bitcoin degli agenti}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; COMPRAVENDITA DI BITCOIN
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to compravendita-bitcoin
+
+  let current-p model-price
+
+  if current-p > 0 [
+
+    let p probabilita-scambio
+
+    let quantita-acquisto min (list trade-size (floor (cash-balance / current-p)))
+    let quantita-vendita min (list trade-size bitcoin-held)
+
+    if ycor >= 0 [
+      if (random-float 1 < p) and (quantita-acquisto > 0) [
+        let costo quantita-acquisto * current-p
+        set cash-balance cash-balance - costo
+        set bitcoin-held bitcoin-held + quantita-acquisto
+
+        set model-trading-volume model-trading-volume + quantita-acquisto
+      ]
+    ]
+
+    if ycor < 0 [
+      if (random-float 1 < p) and (quantita-vendita > 0) [
+        let ricavo quantita-vendita * current-p
+        set bitcoin-held bitcoin-held - quantita-vendita
+        set cash-balance cash-balance + ricavo
+
+        set model-trading-volume model-trading-volume + quantita-vendita
+      ]
+    ]
+  ]
+
+end
+\end{lstlisting}
+
+La procedura \texttt{compravendita-bitcoin} descrive il comportamento di trading
+degli agenti. Ogni agente può comprare o vendere Bitcoin usando il prezzo
+endogeno del modello, memorizzato nella variabile
+
+\[
+\texttt{current-p} = \texttt{model-price}.
+\]
+
+Il blocco principale viene eseguito solo se il prezzo è positivo:
+
+\[
+\texttt{if current-p > 0 [ ... ]}.
+\]
+
+Questa condizione evita operazioni economicamente non valide, come acquisti o
+vendite a prezzo nullo o negativo.
+
+La probabilità che l'agente effettui uno scambio è data da
+
+\[
+\texttt{p = probabilita-scambio}.
+\]
+
+Questa probabilità dipende dalla posizione orizzontale dell'agente: più l'agente
+si trova verso destra, maggiore è la probabilità che partecipi al mercato.
+
+La quantità massima acquistabile è calcolata come
+
+\[
+\texttt{quantita-acquisto}
+=
+\min
+\left(
+\texttt{trade-size},
+\left\lfloor
+\frac{\texttt{cash-balance}}{\texttt{current-p}}
+\right\rfloor
+\right).
+\]
+
+Questa formula impedisce all'agente di comprare più Bitcoin di quanto possa
+permettersi con la liquidità disponibile. La funzione \texttt{floor} arrotonda
+per difetto il numero di Bitcoin acquistabili.
+
+La quantità massima vendibile è invece
+
+\[
+\texttt{quantita-vendita}
+=
+\min
+(
+\texttt{trade-size},
+\texttt{bitcoin-held}
+).
+\]
+
+In questo modo l'agente non può vendere più Bitcoin di quelli effettivamente
+posseduti.
+
+La coordinata verticale \texttt{ycor} stabilisce il tipo di operazione. Se
+
+\[
+\texttt{ycor >= 0},
+\]
+
+l'agente si trova nella regione associata all'acquisto. In questo caso, se un
+numero casuale tra \(0\) e \(1\) è minore della probabilità \texttt{p} e se la
+quantità acquistabile è positiva, l'agente compra Bitcoin. Il costo
+dell'operazione è
+
+\[
+\texttt{costo}
+=
+\texttt{quantita-acquisto}
+\cdot
+\texttt{current-p}.
+\]
+
+Il saldo liquido diminuisce di tale costo, mentre la quantità di Bitcoin detenuta
+aumenta della quantità acquistata.
+
+Se invece
+
+\[
+\texttt{ycor < 0},
+\]
+
+l'agente si trova nella regione associata alla vendita. Se la vendita viene
+estratta casualmente e l'agente possiede Bitcoin sufficienti, il ricavo è
+
+\[
+\texttt{ricavo}
+=
+\texttt{quantita-vendita}
+\cdot
+\texttt{current-p}.
+\]
+
+In questo caso la quantità di Bitcoin detenuta diminuisce, mentre la liquidità
+aumenta del ricavo ottenuto.
+
+Dopo ogni acquisto o vendita riuscita, il volume di trading generato dal modello
+viene aggiornato:
+
+\[
+\texttt{model-trading-volume}
+\leftarrow
+\texttt{model-trading-volume}
++
+\texttt{quantita}.
+\]
+
+Questa variabile misura il numero complessivo di Bitcoin scambiati dagli agenti
+nel tick corrente. La procedura collega quindi la posizione spaziale degli agenti
+alla loro attività di mercato: la coordinata \(y\) determina la direzione
+dell'operazione, mentre la coordinata \(x\) ne influenza la probabilità.
+
+\subsection{Fattore di isteresi dei volumi basato sul prezzo}
+
+\begin{lstlisting}[caption={Reporter per il fattore di scaling dei volumi}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; FATTORE DI SCALING VOLUMI (UNIFICATO BASATO SU PREZZO)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report volume-hysteresis-factor
+
+  let initial-p max (list 1 btc-initial-price)
+  let current-p max (list 1 model-price)
+  let ath-p     max (list current-p btc-ath-price)
+
+  let ratio-current (current-p / initial-p)
+  let ratio-ath     (ath-p / initial-p)
+
+  ;; Formula continua dell'isteresi valida sia in Fase 1 che in Fase 2
+  let price-hysteresis-state ratio-current + (beta-vol * (ratio-ath - ratio-current))
+
+  report max (list 0.01 price-hysteresis-state)
+
+end
+\end{lstlisting}
+
+Il reporter \texttt{volume-hysteresis-factor} calcola un fattore di scaling dei
+volumi a partire dall'andamento del prezzo. L'idea è che il volume di mercato non
+dipenda soltanto dal prezzo corrente, ma anche dalla memoria del massimo prezzo
+raggiunto in passato.
+
+Le prime tre variabili definiscono prezzi sempre positivi:
+
+\[
+\texttt{initial-p} = \max(1,\texttt{btc-initial-price}),
+\]
+
+\[
+\texttt{current-p} = \max(1,\texttt{model-price}),
+\]
+
+\[
+\texttt{ath-p} = \max(\texttt{current-p},\texttt{btc-ath-price}).
+\]
+
+L'uso di \(\max(1,\cdot)\) evita divisioni per zero o valori troppo piccoli. La
+variabile \texttt{ath-p} rappresenta invece il massimo prezzo rilevante per il
+modello, cioè il maggiore tra il prezzo corrente e il massimo storico registrato.
+
+Il codice calcola poi due rapporti normalizzati rispetto al prezzo iniziale:
+
+\[
+\texttt{ratio-current}
+=
+\frac{\texttt{current-p}}{\texttt{initial-p}},
+\]
+
+\[
+\texttt{ratio-ath}
+=
+\frac{\texttt{ath-p}}{\texttt{initial-p}}.
+\]
+
+Il primo rapporto misura quanto il prezzo corrente è cresciuto rispetto al
+valore iniziale. Il secondo misura invece quanto il massimo storico è cresciuto
+rispetto al valore iniziale.
+
+Il fattore di isteresi viene definito come
+
+\[
+H_V
+=
+\texttt{ratio-current}
++
+\beta_{\mathrm{vol}}
+\left(
+\texttt{ratio-ath}
+-
+\texttt{ratio-current}
+\right).
+\]
+
+Nel codice:
+
+\[
+\texttt{price-hysteresis-state = ratio-current + (beta-vol * (ratio-ath - ratio-current))}.
+\]
+
+Il parametro \texttt{beta-vol} controlla quanto peso viene dato alla memoria del
+massimo storico. Se \texttt{beta-vol} è vicino a \(0\), il fattore dipende quasi
+solo dal prezzo corrente. Se invece è più alto, il fattore conserva maggiormente
+l'effetto dei picchi di prezzo passati.
+
+In questo senso si parla di isteresi: lo stato attuale del volume non dipende
+solo dalla situazione presente, ma anche dalla storia precedente del prezzo.
+Anche se il prezzo scende dopo aver raggiunto un massimo, il modello può
+mantenere un livello di volume più elevato a causa della memoria del picco.
+
+L'ultima riga
+
+\[
+\texttt{report max (list 0.01 price-hysteresis-state)}
+\]
+
+impone un limite inferiore pari a \(0.01\). In questo modo il fattore di scaling
+dei volumi resta sempre positivo e non può annullarsi completamente.
+
+\subsection{Volume del modello espresso in dollari}
+
+\begin{lstlisting}[caption={Reporter per il volume di trading del modello in dollari}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; VOLUME DEL MODELLO IN DOLLARI
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report model-trading-volume-usd
+
+  let current-p model-price
+  if current-p <= 0 [ report 0 ]
+
+  report (model-trading-volume * current-p) * volume-hysteresis-factor
+
+end
+\end{lstlisting}
+
+Il reporter \texttt{model-trading-volume-usd} converte il volume di trading
+generato dagli agenti in un controvalore espresso in dollari.
+
+La variabile locale
+
+\[
+\texttt{current-p} = \texttt{model-price}
+\]
+
+memorizza il prezzo endogeno corrente del modello. Questo prezzo viene usato per
+trasformare il numero di Bitcoin scambiati in un valore monetario.
+
+Il controllo
+
+\[
+\texttt{if current-p <= 0 [ report 0 ]}
+\]
+
+serve a evitare che il volume venga calcolato usando un prezzo nullo o negativo.
+In tal caso il reporter restituisce direttamente \(0\), perché non avrebbe senso
+economico calcolare un controvalore di mercato con un prezzo non positivo.
+
+Se il prezzo è valido, il volume in dollari viene calcolato come
+
+\[
+V_{\mathrm{model}}^{USD}
+=
+V_{\mathrm{model}}^{BTC}
+\cdot
+P_m
+\cdot
+H_V,
+\]
+
+dove \(V_{\mathrm{model}}^{BTC}\) è il volume di Bitcoin scambiato dagli agenti,
+\(P_m\) è il prezzo endogeno del modello e \(H_V\) è il fattore di isteresi dei
+volumi.
+
+Nel codice questa formula corrisponde a
+
+\[
+\texttt{(model-trading-volume * current-p) * volume-hysteresis-factor}.
+\]
+
+Il termine \texttt{model-trading-volume * current-p} trasforma il volume da
+Bitcoin a dollari. Il fattore \texttt{volume-hysteresis-factor} introduce invece
+una correzione legata alla memoria del prezzo: i volumi non dipendono soltanto
+dagli scambi correnti, ma anche dalla dinamica storica del prezzo e dal massimo
+raggiunto in precedenza.
+
+In questo modo il modello produce un volume simulato in dollari confrontabile con
+il volume reale di mercato.
+
+\subsection{Lettura dei dati storici da file CSV}
+
+\begin{lstlisting}[caption={Procedura per il caricamento dei dati da un file CSV}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; LETTURA FILE CSV
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to carica-dati-da-csv [ nome-file ]
+  set prices []
+  file-close-all
+
+  carefully [
+    let dati csv:from-file nome-file
+
+    if length dati > 0 [
+      let prima-riga item 0 dati
+      if not is-number? item 1 prima-riga [
+        set dati but-first dati
+      ]
+    ]
+
+    let t 0
+    foreach dati [ riga ->
+      if length riga >= 2 [
+        let p item 1 riga
+        if is-number? p [
+          let vol 0
+          if length riga >= 3 [
+            if is-number? item 2 riga [
+              set vol item 2 riga
+            ]
+          ]
+          set prices lput (list t p vol) prices
+          set t t + 1
+        ]
+      ]
+    ]
+
+    print (word "CSV caricato con successo! Estratti " length prices " record storici validi.")
+  ] [
+    file-close-all
+    user-message (word "Errore nella lettura del file CSV: " nome-file "\nVerifica che il file sia nella stessa cartella.")
+  ]
+end
+\end{lstlisting}
+
+La procedura \texttt{carica-dati-da-csv} permette di caricare una serie storica
+da un file CSV esterno. L'argomento \texttt{nome-file} indica il nome del file da
+leggere, che deve trovarsi nella cartella del modello NetLogo.
+
+All'inizio la lista \texttt{prices} viene svuotata:
+
+\[
+\texttt{set prices []}.
+\]
+
+In questo modo, ogni nuovo caricamento sostituisce i dati precedenti invece di
+aggiungersi a essi. Il comando \texttt{file-close-all} chiude eventuali file
+rimasti aperti da letture precedenti.
+
+La lettura vera e propria avviene dentro un blocco \texttt{carefully}. Questo
+serve a intercettare eventuali errori, ad esempio se il file non esiste, se il
+nome è scritto male oppure se il file non è nella cartella corretta.
+
+Il comando
+
+\[
+\texttt{let dati csv:from-file nome-file}
+\]
+
+legge il file CSV e lo trasforma in una lista di righe. Ogni riga è a sua volta
+una lista contenente i valori delle colonne.
+
+Il blocco successivo controlla se la prima riga è un'intestazione. Se nella
+seconda colonna della prima riga non è presente un numero, allora il codice
+interpreta quella riga come header e la rimuove:
+
+\[
+\texttt{set dati but-first dati}.
+\]
+
+Successivamente viene introdotta la variabile \texttt{t}, che rappresenta
+l'indice temporale dei dati caricati. Per ogni riga del file, il codice controlla
+che siano presenti almeno due colonne. La seconda colonna viene interpretata come
+prezzo:
+
+\[
+\texttt{let p item 1 riga}.
+\]
+
+Se \texttt{p} è un numero, allora la riga viene considerata valida. Il volume
+viene inizializzato a zero:
+
+\[
+\texttt{let vol 0}.
+\]
+
+Se esiste anche una terza colonna e questa contiene un valore numerico, allora
+quel valore viene usato come volume:
+
+\[
+\texttt{set vol item 2 riga}.
+\]
+
+Ogni record valido viene infine inserito nella lista \texttt{prices} nella forma
+
+\[
+(t, p, vol),
+\]
+
+cioè:
+
+\[
+\texttt{list t p vol}.
+\]
+
+Nel modello, quindi, ogni elemento di \texttt{prices} contiene tre informazioni:
+l'indice temporale, il prezzo e il volume associato. Dopo ogni riga valida,
+\texttt{t} viene incrementato di uno, così da costruire una sequenza temporale
+ordinata.
+
+Se la lettura va a buon fine, il modello stampa un messaggio con il numero di
+record storici validi estratti. Se invece si verifica un errore, viene chiuso ogni
+file aperto e compare un messaggio per avvisare l'utente che il CSV non è stato
+letto correttamente.
+
+\subsection{Gestione degli scenari di simulazione}
+
+\begin{lstlisting}[caption={Procedura per la selezione dello scenario di mercato}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GESTIONE SCENARI
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to scarica-dati
+
+  if scenario = "csv" [
+    carica-dati-da-csv "dati_btc.csv"
+    stop
+  ]
+
+  if scenario = "api-live" [
+    set prices genera-prezzi-api
+    stop
+  ]
+
+  if scenario = "crash" [
+    set prices genera-crash 60000
+    stop
+  ]
+
+  if scenario = "bull-market" [
+    set prices genera-prezzi 30000 0.015 0.01
+    stop
+  ]
+
+  if scenario = "bear-market" [
+    set prices genera-prezzi 60000 -0.015 0.01
+    stop
+  ]
+
+  if scenario = "sideways" [
+    set prices genera-prezzi 40000 0 0.005
+    stop
+  ]
+
+  if scenario = "bubble" [
+    set prices genera-bolla 30000
+    stop
+  ]
+
+end
+\end{lstlisting}
+
+La procedura \texttt{scarica-dati} seleziona quale serie storica utilizzare per
+inizializzare il modello. La scelta dipende dal valore della variabile
+\texttt{scenario}, che può corrispondere a diversi tipi di mercato.
+
+Se lo scenario è
+
+\[
+\texttt{"csv"},
+\]
+
+il modello carica i dati dal file esterno \texttt{dati\_btc.csv} tramite la
+procedura
+
+\[
+\texttt{carica-dati-da-csv "dati\_btc.csv"}.
+\]
+
+In questo caso la simulazione usa una serie storica salvata localmente.
+
+Se lo scenario è
+
+\[
+\texttt{"api-live"},
+\]
+
+la lista \texttt{prices} viene costruita tramite
+
+\[
+\texttt{set prices genera-prezzi-api}.
+\]
+
+Questo scenario permette di usare dati ottenuti da una sorgente esterna, invece
+di dati generati artificialmente.
+
+Gli altri scenari producono invece serie sintetiche. Lo scenario
+
+\[
+\texttt{"crash"}
+\]
+
+genera un andamento caratterizzato da una forte caduta del prezzo, partendo dal
+valore iniziale \(60000\). Lo scenario
+
+\[
+\texttt{"bull-market"}
+\]
+
+genera una dinamica crescente, con prezzo iniziale \(30000\), drift positivo
+\(0.015\) e rumore \(0.01\). Lo scenario
+
+\[
+\texttt{"bear-market"}
+\]
+
+usa invece un drift negativo pari a \(-0.015\), simulando un mercato
+tendenzialmente ribassista.
+
+Lo scenario
+
+\[
+\texttt{"sideways"}
+\]
+
+rappresenta un mercato laterale, cioè privo di una direzione dominante. Infatti
+il drift è nullo:
+
+\[
+\texttt{genera-prezzi 40000 0 0.005}.
+\]
+
+Infine, lo scenario
+
+\[
+\texttt{"bubble"}
+\]
+
+genera una dinamica di bolla, partendo da un prezzo iniziale pari a \(30000\).
+
+Dopo ogni scelta viene eseguito il comando
+
+\[
+\texttt{stop}.
+\]
+
+Questo interrompe la procedura appena uno scenario è stato riconosciuto, evitando
+che vengano controllati inutilmente anche gli scenari successivi.
+
+La procedura permette quindi di usare lo stesso modello in condizioni di mercato
+diverse: dati reali da CSV, dati esterni tramite API oppure scenari sintetici
+come crescita, crisi, mercato laterale e bolla speculativa.
+
+\subsection{Generazione dei prezzi tramite API live}
+
+\begin{lstlisting}[caption={Reporter per la costruzione di una serie prezzi con prezzo finale live da API}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PREZZO LIVE DA API
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report genera-prezzi-api
+
+  let url "https://api.coinbase.com/v2/prices/BTC-USD/spot"
+  let raw-json ""
+  let fetch-failed? false
+
+  carefully [
+    set raw-json fetch:url url
+  ] [
+    set fetch-failed? true
+  ]
+
+  if fetch-failed? or raw-json = "" [
+    user-message "Errore richiesta API\nUso del trend sintetico di fallback."
+    report genera-prezzi 40000 0 0.005
+  ]
+
+  let data table:from-json raw-json
+  let data-map table:get data "data"
+  let current-price read-from-string (table:get data-map "amount")
+
+  let result []
+  let p 40000
+  let t 0
+
+  while [t < (num-days - 1)] [
+    let r (random-normal 0 0.005)
+    set p p * (1 + r)
+    set result lput (list t p 0) result
+    set t t + 1
+  ]
+
+  set result lput (list t current-price 0) result
+
+  report result
+
+end
+\end{lstlisting}
+
+Il reporter \texttt{genera-prezzi-api} costruisce una serie di prezzi usando un
+prezzo live ottenuto tramite API. L'obiettivo non è scaricare un'intera serie
+storica reale, ma generare una traiettoria sintetica che termina con il prezzo
+corrente di Bitcoin.
+
+La variabile
+
+\[
+\texttt{url}
+\]
+
+contiene l'indirizzo dell'API da cui viene richiesto il prezzo spot di
+\texttt{BTC-USD}. Le variabili \texttt{raw-json} e \texttt{fetch-failed?}
+servono rispettivamente a memorizzare la risposta grezza dell'API e a registrare
+l'eventuale fallimento della richiesta.
+
+La chiamata esterna viene eseguita dentro un blocco \texttt{carefully}:
+
+\[
+\texttt{set raw-json fetch:url url}.
+\]
+
+Se la richiesta fallisce, la variabile \texttt{fetch-failed?} viene posta uguale
+a \texttt{true}. In questo modo il modello non si blocca in caso di assenza di
+connessione, errore dell'API o risposta non valida.
+
+Se la richiesta non va a buon fine, oppure se la risposta è vuota, il modello
+mostra un messaggio all'utente e usa una serie sintetica di fallback:
+
+\[
+\texttt{genera-prezzi 40000 0 0.005}.
+\]
+
+Questo fallback rappresenta un mercato laterale con prezzo iniziale \(40000\),
+drift nullo e rumore pari a \(0.005\).
+
+Se invece la risposta dell'API è valida, il testo JSON viene convertito in una
+struttura leggibile tramite
+
+\[
+\texttt{table:from-json raw-json}.
+\]
+
+Il codice accede poi al campo \texttt{"data"} e recupera il valore
+\texttt{"amount"}, che contiene il prezzo corrente. Poiché tale valore arriva
+come stringa, viene trasformato in numero con
+
+\[
+\texttt{read-from-string}.
+\]
+
+La seconda parte del reporter costruisce la serie \texttt{result}. La variabile
+\texttt{p} parte da \(40000\), mentre \texttt{t} rappresenta l'indice temporale.
+Finché
+
+\[
+t < \texttt{num-days} - 1,
+\]
+
+il modello genera un rendimento casuale
+
+\[
+r \sim \mathcal{N}(0,0.005)
+\]
+
+e aggiorna il prezzo secondo la regola
+
+\[
+p_{t+1}=p_t(1+r).
+\]
+
+Ogni valore generato viene aggiunto alla lista \texttt{result} nella forma
+
+\[
+(t,p,0),
+\]
+
+dove il terzo elemento rappresenta il volume, qui posto uguale a zero.
+
+Alla fine del ciclo, l'ultimo elemento della serie viene sostituito dal prezzo
+live ottenuto tramite API:
+
+\[
+\texttt{set result lput (list t current-price 0) result}.
+\]
+
+Il reporter restituisce quindi una lista di record temporali in cui i primi
+valori sono generati sinteticamente, mentre l'ultimo prezzo coincide con il
+prezzo corrente letto dall'API.
+
+\subsection{Generazione di scenari sintetici di prezzo}
+
+\begin{lstlisting}[caption={Reporter per la generazione di prezzi sintetici, crash e bolla}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GENERA PREZZI SINTETICI
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report genera-prezzi [ prezzo-iniziale drift sigma ]
+
+  let result []
+  let p prezzo-iniziale
+  let t 0
+
+  while [t < num-days] [
+    let r drift + random-normal 0 sigma
+    set p p * (1 + r)
+    if p < 1 [ set p 1 ]
+    set result lput (list t p 0) result
+    set t t + 1
+  ]
+
+  report result
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GENERA CRASH SINTETICO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report genera-crash [prezzo-iniziale]
+
+  let result []
+  let p prezzo-iniziale
+  let t 0
+
+  while [t < num-days] [
+    let r 0
+
+    ifelse t < 100 [
+      set r random-normal 0 0.005
+    ][
+      ifelse t < 110 [
+        set r -0.25 + random-normal 0 0.02
+      ][
+        set r random-normal 0.003 0.012
+      ]
+    ]
+
+    set p p * (1 + r)
+    if p < 1 [ set p 1 ]
+    set result lput (list t p 0) result
+    set t t + 1
+  ]
+
+  report result
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GENERA BOLLA SINTETICA
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report genera-bolla [prezzo-iniziale]
+
+  let result []
+  let p prezzo-iniziale
+  let t 0
+
+  while [t < num-days] [
+    let r 0
+
+    ifelse t < 100 [
+      set r 0.025 + random-normal 0 0.008
+    ][
+      ifelse t < 110 [
+        set r 0.08 + random-normal 0 0.02
+      ][
+        ifelse t < 115 [
+          set r -0.3 + random-normal 0 0.025
+        ][
+          set r -0.002 + random-normal 0 0.015
+        ]
+      ]
+    ]
+
+    set p p * (1 + r)
+    if p < 1 [ set p 1 ]
+    set result lput (list t p 0) result
+    set t t + 1
+  ]
+
+  report result
+
+end
+\end{lstlisting}
+
+Questi tre reporter generano serie temporali sintetiche di prezzo, usate quando
+non si vogliono caricare dati reali o quando si desidera studiare il comportamento
+del modello in scenari controllati.
+
+Il reporter \texttt{genera-prezzi} produce una dinamica generica a partire da tre
+parametri: \texttt{prezzo-iniziale}, \texttt{drift} e \texttt{sigma}. Il prezzo
+parte dal valore iniziale assegnato e, a ogni passo temporale, viene aggiornato
+tramite un rendimento casuale:
+
+\[
+r = \texttt{drift} + \mathcal{N}(0,\texttt{sigma}).
+\]
+
+Il parametro \texttt{drift} rappresenta la tendenza media del mercato: se è
+positivo genera una crescita media, se è negativo genera una discesa media, se è
+nullo produce un mercato laterale. Il parametro \texttt{sigma} controlla invece
+l'intensità delle oscillazioni casuali.
+
+Il prezzo viene aggiornato secondo la regola
+
+\[
+p_{t+1}=p_t(1+r).
+\]
+
+La condizione
+
+\[
+\texttt{if p < 1 [ set p 1 ]}
+\]
+
+impone un limite inferiore al prezzo, evitando che la serie assuma valori nulli o
+negativi. Ogni osservazione viene salvata nella lista \texttt{result} nella forma
+
+\[
+(t,p,0),
+\]
+
+dove \(t\) è l'indice temporale, \(p\) è il prezzo e il terzo valore rappresenta
+il volume, qui posto uguale a zero.
+
+Il reporter \texttt{genera-crash} costruisce invece uno scenario di crollo del
+mercato. La dinamica è divisa in tre fasi. Per i primi \(100\) tick il prezzo
+oscilla intorno a un rendimento medio nullo:
+
+\[
+r \sim \mathcal{N}(0,0.005).
+\]
+
+Tra il tick \(100\) e il tick \(109\), il modello introduce una forte caduta:
+
+\[
+r = -0.25 + \mathcal{N}(0,0.02).
+\]
+
+Dopo il crash, il rendimento torna moderatamente positivo:
+
+\[
+r \sim \mathcal{N}(0.003,0.012).
+\]
+
+Questo permette di simulare una fase inizialmente stabile, seguita da un crollo
+rapido e da una successiva fase di parziale recupero.
+
+Il reporter \texttt{genera-bolla} genera invece uno scenario di bolla
+speculativa. Anche in questo caso la dinamica è divisa in più fasi. Nei primi
+\(100\) tick il prezzo cresce in modo sostenuto:
+
+\[
+r = 0.025 + \mathcal{N}(0,0.008).
+\]
+
+Tra il tick \(100\) e il tick \(109\), la crescita accelera ulteriormente:
+
+\[
+r = 0.08 + \mathcal{N}(0,0.02).
+\]
+
+Tra il tick \(110\) e il tick \(114\), la bolla esplode e il prezzo subisce una
+brusca caduta:
+
+\[
+r = -0.3 + \mathcal{N}(0,0.025).
+\]
+
+Infine, dopo il collasso, il mercato entra in una fase discendente e più
+rumorosa:
+
+\[
+r = -0.002 + \mathcal{N}(0,0.015).
+\]
+
+Queste tre procedure permettono quindi di confrontare il comportamento degli
+agenti in mercati con caratteristiche molto diverse: crescita regolare, ribasso,
+stabilità laterale, crash improvviso e bolla speculativa.
+
+\subsection{Aggiornamento giornaliero dei dati di mercato}
+
+\begin{lstlisting}[caption={Procedura di aggiornamento giornaliero dei prezzi e dei volumi reali}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; AGGIORNAMENTO GIORNALIERO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to aggiorna-dati
+
+  if not is-list? prices [ stop ]
+  if day-index >= length prices [ stop ]
+
+  let record item day-index prices
+  let new-price item 1 record
+
+  ifelse length record >= 3 [
+    set real-trading-volume-usd item 2 record
+  ] [
+    set real-trading-volume-usd 0
+  ]
+
+  if real-volume-initial = 0 and real-trading-volume-usd > 0 [
+    set real-volume-initial real-trading-volume-usd
+    set real-volume-ath real-trading-volume-usd
+  ]
+
+  if real-trading-volume-usd > real-volume-ath [
+    set real-volume-ath real-trading-volume-usd
+  ]
+
+  ifelse btc-prev-price > 0 [
+    set btc-return (new-price - btc-prev-price) / btc-prev-price
+    set btc-volatility abs btc-return
+  ][
+    set btc-return 0
+    set btc-volatility 0
+  ]
+
+  set btc-prev-price btc-price
+  set btc-price new-price
+
+  if btc-initial-price = 0 and btc-price > 0 [
+    set btc-initial-price btc-price
+    set btc-ath-price btc-price
+  ]
+
+  if btc-price > btc-ath-price [
+    set btc-ath-price btc-price
+  ]
+
+  set day-index day-index + 1
+
+end
+\end{lstlisting}
+
+La procedura \texttt{aggiorna-dati} aggiorna i dati reali di mercato letti dalla
+lista \texttt{prices}. Ogni elemento della lista rappresenta un record temporale
+contenente almeno il prezzo e, se disponibile, anche il volume reale di scambio.
+
+All'inizio vengono effettuati due controlli di sicurezza:
+
+\[
+\texttt{if not is-list? prices [ stop ]}
+\]
+
+e
+
+\[
+\texttt{if day-index >= length prices [ stop ]}.
+\]
+
+Il primo controllo verifica che \texttt{prices} sia effettivamente una lista; il
+secondo evita di leggere oltre la fine della serie storica disponibile.
+
+Il record corrente viene estratto tramite
+
+\[
+\texttt{let record item day-index prices},
+\]
+
+mentre il nuovo prezzo viene preso dalla seconda posizione del record:
+
+\[
+\texttt{let new-price item 1 record}.
+\]
+
+Se il record contiene almeno tre elementi, il terzo valore viene interpretato
+come volume reale in dollari:
+
+\[
+\texttt{set real-trading-volume-usd item 2 record}.
+\]
+
+Se invece il volume non è disponibile, viene posto uguale a zero. Questa scelta
+permette alla procedura di funzionare sia con serie storiche complete, contenenti
+prezzo e volume, sia con serie contenenti soltanto il prezzo.
+
+Il blocco successivo inizializza il volume reale iniziale e il massimo volume
+raggiunto:
+
+\[
+\texttt{real-volume-initial},
+\qquad
+\texttt{real-volume-ath}.
+\]
+
+Il volume iniziale viene impostato solo quando viene osservato il primo volume
+positivo. Successivamente, se il volume reale corrente supera il massimo
+registrato, la variabile \texttt{real-volume-ath} viene aggiornata.
+
+La procedura calcola poi il rendimento reale di Bitcoin:
+
+\[
+r_{BTC}(t)
+=
+\frac{P_{BTC}(t)-P_{BTC}(t-1)}
+     {P_{BTC}(t-1)}.
+\]
+
+Nel codice, questa quantità è memorizzata in \texttt{btc-return}:
+
+\[
+\texttt{set btc-return (new-price - btc-prev-price) / btc-prev-price}.
+\]
+
+La volatilità reale viene invece approssimata tramite il valore assoluto del
+rendimento:
+
+\[
+\sigma_{BTC}(t)=|r_{BTC}(t)|.
+\]
+
+Se il prezzo precedente non è positivo, rendimento e volatilità vengono posti
+uguali a zero, evitando divisioni non valide.
+
+Dopo il calcolo del rendimento, il codice aggiorna il prezzo precedente e il
+prezzo corrente:
+
+\[
+\texttt{set btc-prev-price btc-price},
+\qquad
+\texttt{set btc-price new-price}.
+\]
+
+In questo modo il modello mantiene memoria del prezzo usato nel passo temporale
+precedente e registra il nuovo prezzo reale appena letto dalla serie storica.
+
+Se \texttt{btc-initial-price} non è ancora stato assegnato, il primo prezzo
+positivo viene usato sia come prezzo iniziale sia come massimo iniziale:
+
+\[
+\texttt{btc-initial-price} = \texttt{btc-price},
+\qquad
+\texttt{btc-ath-price} = \texttt{btc-price}.
+\]
+
+Infine, se il nuovo prezzo supera il massimo storico registrato, viene aggiornato
+\texttt{btc-ath-price}. La sigla ATH indica \emph{All-Time High}, cioè il massimo
+prezzo raggiunto nella finestra di simulazione.
+
+La procedura termina incrementando \texttt{day-index} di una unità. In questo
+modo, alla chiamata successiva, il modello leggerà il record temporale seguente
+della lista \texttt{prices}.
+
+\subsection{Correlazione dei volumi e switch automatico di regime}
+
+\begin{lstlisting}[caption={Calcolo della correlazione di Pearson sui volumi e aggiornamento del relativo plot}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CALCOLO E PLOT CORRELAZIONE VOLUMI (PEARSON)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to aggiorna-storico-volumi
+
+  set model-volume-history lput model-trading-volume-usd model-volume-history
+  set real-volume-history lput real-trading-volume-usd real-volume-history
+
+  ;; Applicazione finestra mobile agli storici dei volumi
+  if is-number? window-size and window-size > 0 [
+    if length model-volume-history > window-size [
+      set model-volume-history but-first model-volume-history
+      set real-volume-history but-first real-volume-history
+    ]
+  ]
+
+  ;; Calcolo correlazione di Pearson per i volumi
+  if length model-volume-history >= 2 [
+    let mean-m mean model-volume-history
+    let mean-r mean real-volume-history
+
+    let cov sum (map [ [m r] -> (m - mean-m) * (r - mean-r) ] model-volume-history real-volume-history)
+    let std-m sqrt sum (map [ m -> (m - mean-m) ^ 2 ] model-volume-history)
+    let std-r sqrt sum (map [ r -> (r - mean-r) ^ 2 ] real-volume-history)
+
+    ifelse (std-m > 0 and std-r > 0) [
+      set volume-correlation cov / (std-m * std-r)
+    ] [
+      set volume-correlation 0
+    ]
+
+    ;; Applicazione finestra mobile allo storico della correlazione
+    set volume-correlation-history lput volume-correlation volume-correlation-history
+    if length volume-correlation-history > window-size [
+      set volume-correlation-history but-first volume-correlation-history
+    ]
+
+    set mean-volume-correlation mean volume-correlation-history
+  ]
+
+  if (not current-disabled?) and (length model-volume-history >= window-size) [
+
+    ifelse mean-volume-correlation >= pearson-threshold [
+      set above-threshold-counter above-threshold-counter + 1
+    ] [
+      set above-threshold-counter 0
+    ]
+
+    if above-threshold-counter > 5 [
+      set current-disabled? true
+      print (word "!!! REGIME RAGGIUNTO A GIORNO " day-index " !!!")
+      print (word "Correlazione media volumi (" precision mean-volume-correlation 3 ") >= " pearson-threshold " per piu' di 5 tick consecutivi.")
+      print "Passaggio a FASE 2 (Prezzo Endogeno)."
+    ]
+  ]
+
+end
+
+to aggiorna-plot-correlazione-volumi
+
+  carefully [
+    set-current-plot "Correlazione Volumi (Pearson r)"
+
+    assicura-penna "soglia-switch" red
+    plotxy day-index pearson-threshold
+
+    assicura-penna "zero" black
+    plotxy day-index 0
+
+    if real-trading-volume-usd > 0 [
+      assicura-penna "correlazione" blue
+      plotxy day-index volume-correlation
+
+      assicura-penna "correlazione-media" green
+      plotxy day-index mean-volume-correlation
+    ]
+  ] [ ]
+
+end
+\end{lstlisting}
+
+La procedura \texttt{aggiorna-storico-volumi} aggiorna gli storici dei volumi
+generati dal modello e dei volumi reali. A ogni chiamata, il valore corrente del
+volume simulato in dollari viene aggiunto a \texttt{model-volume-history}, mentre
+il volume reale viene aggiunto a \texttt{real-volume-history}.
+
+Per evitare che gli storici crescano indefinitamente, il codice applica una
+finestra mobile di ampiezza \texttt{window-size}. Se la lunghezza degli storici
+supera tale valore, viene eliminato il primo elemento tramite \texttt{but-first}.
+In questo modo, la correlazione viene calcolata solo sugli ultimi valori
+osservati, non sull'intera storia della simulazione.
+
+Quando sono disponibili almeno due osservazioni, il codice calcola la
+correlazione di Pearson tra la serie dei volumi simulati e la serie dei volumi
+reali. Vengono prima calcolate le medie:
+
+\[
+\bar{V}_m = \texttt{mean model-volume-history},
+\qquad
+\bar{V}_r = \texttt{mean real-volume-history}.
+\]
+
+Successivamente vengono calcolate la covarianza non normalizzata e le deviazioni
+standard non normalizzate:
+
+\[
+\text{cov}
+=
+\sum_i
+\left(
+V_{m,i}-\bar{V}_m
+\right)
+\left(
+V_{r,i}-\bar{V}_r
+\right),
+\]
+
+\[
+\sigma_m
+=
+\sqrt{
+\sum_i
+\left(
+V_{m,i}-\bar{V}_m
+\right)^2
+},
+\qquad
+\sigma_r
+=
+\sqrt{
+\sum_i
+\left(
+V_{r,i}-\bar{V}_r
+\right)^2
+}.
+\]
+
+La correlazione viene quindi calcolata come
+
+\[
+r_V =
+\frac{\text{cov}}{\sigma_m \sigma_r}.
+\]
+
+Se almeno una delle due deviazioni standard è nulla, la correlazione viene posta
+uguale a \(0\), perché non è possibile misurare una relazione lineare quando una
+delle due serie è costante.
+
+Il valore ottenuto viene salvato in \texttt{volume-correlation} e aggiunto allo
+storico \texttt{volume-correlation-history}. Anche questo storico viene mantenuto
+entro la dimensione massima \texttt{window-size}. La variabile
+\texttt{mean-volume-correlation} rappresenta la media recente delle correlazioni
+dei volumi.
+
+La parte finale della procedura gestisce lo switch automatico tra Fase 1 e Fase
+2. Finché \texttt{current-disabled?} è falso, il modello resta nella fase guidata
+dai dati reali. Quando lo storico dei volumi ha raggiunto la lunghezza della
+finestra mobile, il codice controlla se
+
+\[
+\texttt{mean-volume-correlation} \geq \texttt{pearson-threshold}.
+\]
+
+Se la condizione è verificata, il contatore
+\texttt{above-threshold-counter} aumenta di \(1\). Se invece la correlazione
+media scende sotto soglia, il contatore viene azzerato. Quando il contatore
+supera \(5\), il modello considera raggiunto un regime sufficientemente stabile
+e imposta
+
+\[
+\texttt{current-disabled? = true}.
+\]
+
+Questo provoca il passaggio alla Fase 2, in cui il prezzo non viene più copiato
+dal mercato reale ma viene generato endogenamente dal modello.
+
+La procedura \texttt{aggiorna-plot-correlazione-volumi} aggiorna il grafico
+\texttt{Correlazione Volumi (Pearson r)}. Il blocco \texttt{carefully} evita che
+eventuali problemi con il plot o con le penne blocchino la simulazione.
+
+Nel grafico vengono tracciate quattro curve o riferimenti:
+
+\[
+\texttt{soglia-switch},
+\qquad
+\texttt{zero},
+\qquad
+\texttt{correlazione},
+\qquad
+\texttt{correlazione-media}.
+\]
+
+La penna \texttt{soglia-switch} disegna la soglia
+\texttt{pearson-threshold}, mentre la penna \texttt{zero} disegna la linea di
+riferimento \(r=0\). Se il volume reale è positivo, vengono poi tracciate la
+correlazione istantanea dei volumi e la sua media mobile. In questo modo il plot
+mostra sia il valore corrente della correlazione sia la sua tendenza recente,
+rendendo visibile il momento in cui il modello si avvicina alla soglia di switch.
+
+\subsection{Correlazione di Pearson tra prezzi reali e prezzi simulati}
+
+\begin{lstlisting}[caption={Calcolo della correlazione di Pearson sui prezzi e aggiornamento del relativo plot}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CALCOLO E PLOT CORRELAZIONE PREZZI (PEARSON)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to aggiorna-correlazione-prezzi
+
+  set model-price-history lput model-price model-price-history
+  set real-price-history lput btc-price real-price-history
+
+  ;; Finestra mobile sugli storici dei prezzi
+  if is-number? window-size and window-size > 0 [
+    if length model-price-history > window-size [
+      set model-price-history but-first model-price-history
+      set real-price-history but-first real-price-history
+    ]
+  ]
+
+  ;; Calcolo correlazione di Pearson per i prezzi
+  if length model-price-history >= 2 [
+    let mean-m mean model-price-history
+    let mean-r mean real-price-history
+
+    let cov sum (map [ [m r] -> (m - mean-m) * (r - mean-r) ] model-price-history real-price-history)
+    let std-m sqrt sum (map [ m -> (m - mean-m) ^ 2 ] model-price-history)
+    let std-r sqrt sum (map [ r -> (r - mean-r) ^ 2 ] real-price-history)
+
+    ifelse (std-m > 0 and std-r > 0) [
+      set price-correlation cov / (std-m * std-r)
+    ] [
+      set price-correlation 0
+    ]
+
+    ;; Finestra mobile sullo storico della correlazione
+    set price-correlation-history lput price-correlation price-correlation-history
+    if length price-correlation-history > window-size [
+      set price-correlation-history but-first price-correlation-history
+    ]
+
+    set mean-price-correlation mean price-correlation-history
+  ]
+
+end
+
+to aggiorna-plot-correlazione-prezzi
+
+  carefully [
+    set-current-plot "Correlazione Prezzi (Pearson r)"
+
+    assicura-penna "zero" black
+    plotxy day-index 0
+
+    if btc-price > 0 [
+      assicura-penna "correlazione" orange
+      plotxy day-index price-correlation
+
+      assicura-penna "correlazione-media" magenta
+      plotxy day-index mean-price-correlation
+    ]
+  ] [ ]
+
+end
+\end{lstlisting}
+
+La procedura \texttt{aggiorna-correlazione-prezzi} confronta l'andamento del
+prezzo generato dal modello con quello del prezzo reale di Bitcoin. A ogni
+aggiornamento, il prezzo endogeno \texttt{model-price} viene aggiunto allo storico
+
+\[
+\texttt{model-price-history},
+\]
+
+mentre il prezzo reale \texttt{btc-price} viene aggiunto allo storico
+
+\[
+\texttt{real-price-history}.
+\]
+
+Anche in questo caso viene usata una finestra mobile di ampiezza
+\texttt{window-size}. Se gli storici superano questa lunghezza, il primo elemento
+viene eliminato tramite \texttt{but-first}. In questo modo la correlazione misura
+la somiglianza recente tra le due serie, invece di dipendere da tutta la storia
+precedente della simulazione.
+
+Quando sono disponibili almeno due osservazioni, il codice calcola la
+correlazione di Pearson tra prezzi simulati e prezzi reali. Prima vengono
+calcolate le medie:
+
+\[
+\bar{P}_m = \texttt{mean model-price-history},
+\qquad
+\bar{P}_r = \texttt{mean real-price-history}.
+\]
+
+Poi vengono calcolate la covarianza non normalizzata e le due deviazioni standard:
+
+\[
+\text{cov}
+=
+\sum_i
+(P_{m,i}-\bar{P}_m)
+(P_{r,i}-\bar{P}_r),
+\]
+
+\[
+\sigma_m =
+\sqrt{
+\sum_i
+(P_{m,i}-\bar{P}_m)^2
+},
+\qquad
+\sigma_r =
+\sqrt{
+\sum_i
+(P_{r,i}-\bar{P}_r)^2
+}.
+\]
+
+La correlazione dei prezzi è quindi
+
+\[
+r_P =
+\frac{\text{cov}}{\sigma_m\sigma_r}.
+\]
+
+Se una delle due deviazioni standard è nulla, la correlazione viene posta uguale
+a \(0\). Questo evita divisioni per zero e indica che non è possibile valutare
+una relazione lineare significativa se una delle due serie è costante.
+
+Il valore ottenuto viene salvato in \texttt{price-correlation} e aggiunto allo
+storico \texttt{price-correlation-history}. Anche questo storico viene mantenuto
+entro la finestra mobile. La variabile \texttt{mean-price-correlation} contiene
+la media recente delle correlazioni dei prezzi.
+
+La procedura \texttt{aggiorna-plot-correlazione-prezzi} aggiorna il grafico
+\texttt{Correlazione Prezzi (Pearson r)}. Il blocco \texttt{carefully} impedisce
+che eventuali problemi con il plot interrompano la simulazione.
+
+Nel grafico vengono tracciati tre elementi principali:
+
+\[
+\texttt{zero},
+\qquad
+\texttt{correlazione},
+\qquad
+\texttt{correlazione-media}.
+\]
+
+La penna \texttt{zero} disegna la linea di riferimento \(r=0\). Se il prezzo
+reale è positivo, vengono poi disegnate la correlazione istantanea tra prezzi e
+la sua media mobile. Il grafico permette quindi di osservare quanto il prezzo
+endogeno del modello segua, almeno linearmente, il prezzo reale di Bitcoin.
+
+\subsection{Plot di prezzo, volume e parametri d'ordine}
+
+\begin{lstlisting}[caption={Aggiornamento dei plot e calcolo dei parametri d'ordine}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PLOT PREZZO E VOLUME
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to aggiorna-plot-prezzi-e-volume
+
+  carefully [
+    set-current-plot "Prezzo BTC (USD)"
+
+    assicura-penna "prezzo-reale" blue
+    plotxy day-index btc-price
+
+    assicura-penna "prezzo-stimato" red
+    plotxy day-index model-price
+
+    set-current-plot "Volume BTC (USD)"
+
+    assicura-penna "modello-usd" green
+    plotxy day-index model-trading-volume-usd
+
+    if real-trading-volume-usd > 0 [
+      assicura-penna "reale-usd" gray
+      plotxy day-index real-trading-volume-usd
+    ]
+  ] [ ]
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PARAMETRI D'ORDINE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report order-parameter
+  report order-parameter-of turtles
+end
+
+to-report order-parameter-a
+  report order-parameter-of agents-a
+end
+
+to-report order-parameter-b
+  report order-parameter-of agents-b
+end
+
+to-report order-parameter-c
+  report order-parameter-of agents-c
+end
+
+to-report order-parameter-of [agenti-selezionati]
+
+  if count agenti-selezionati = 0 [ report 0 ]
+
+  let sx sum [dx] of agenti-selezionati
+  let sy sum [dy] of agenti-selezionati
+
+  report (sqrt (sx ^ 2 + sy ^ 2)) / count agenti-selezionati
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PLOT PARAMETRI D'ORDINE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to aggiorna-plot-parametri
+
+  carefully [
+    set-current-plot "Parametri d'ordine"
+
+    assicura-penna "globale" black
+    plotxy ticks order-parameter
+
+    assicura-penna "specie-a" yellow
+    plotxy ticks order-parameter-a
+
+    assicura-penna "specie-b" red
+    plotxy ticks order-parameter-b
+
+    assicura-penna "specie-c" cyan
+    plotxy ticks order-parameter-c
+  ] [ ]
+
+end
+\end{lstlisting}
+
+La procedura \texttt{aggiorna-plot-prezzi-e-volume} aggiorna i grafici relativi
+al prezzo e al volume. Il blocco è racchiuso in \texttt{carefully}, così eventuali
+problemi con i plot o con le penne non interrompono la simulazione.
+
+Nel plot
+
+\[
+\texttt{"Prezzo BTC (USD)"}
+\]
+
+vengono tracciate due serie: il prezzo reale di Bitcoin, \texttt{btc-price}, e il
+prezzo stimato dal modello, \texttt{model-price}. La prima serie rappresenta il
+dato esterno o storico, mentre la seconda rappresenta il prezzo generato dalla
+dinamica degli agenti.
+
+Nel plot
+
+\[
+\texttt{"Volume BTC (USD)"}
+\]
+
+viene invece tracciato il volume simulato in dollari, dato da
+\texttt{model-trading-volume-usd}. Se il volume reale è disponibile e positivo,
+viene aggiunta anche la serie \texttt{real-trading-volume-usd}. In questo modo è
+possibile confrontare l'attività di mercato generata dal modello con quella
+osservata nei dati reali.
+
+La seconda parte del codice introduce i parametri d'ordine. Il parametro d'ordine
+misura il grado di allineamento collettivo degli agenti. Il reporter generale
+
+\[
+\texttt{order-parameter}
+\]
+
+calcola il valore sull'intera popolazione, mentre i reporter
+\texttt{order-parameter-a}, \texttt{order-parameter-b} e
+\texttt{order-parameter-c} lo calcolano separatamente per le tre specie.
+
+Il calcolo effettivo è svolto da
+
+\[
+\texttt{order-parameter-of [agenti-selezionati]}.
+\]
+
+Se l'insieme di agenti selezionato è vuoto, il reporter restituisce \(0\). In caso
+contrario, vengono sommate le componenti direzionali degli agenti:
+
+\[
+S_x = \sum_i dx_i,
+\qquad
+S_y = \sum_i dy_i.
+\]
+
+Il parametro d'ordine è quindi
+
+\[
+\Phi =
+\frac{\sqrt{S_x^2+S_y^2}}{N},
+\]
+
+dove \(N\) è il numero di agenti considerati. Se gli agenti sono orientati in
+direzioni casuali, le componenti tendono a compensarsi e \(\Phi\) è vicino a
+\(0\). Se invece gli agenti sono fortemente allineati, il modulo della somma
+vettoriale cresce e \(\Phi\) si avvicina a \(1\).
+
+Infine, la procedura \texttt{aggiorna-plot-parametri} aggiorna il grafico
+
+\[
+\texttt{"Parametri d'ordine"}.
+\]
+
+Nel plot vengono tracciati il parametro globale e i tre parametri specifici delle
+specie A, B e C. Questo consente di osservare se l'allineamento emerge in tutta la
+popolazione oppure solo all'interno di alcuni gruppi.
+
+\subsection{Reporter di portafoglio aggregato}
+
+\begin{lstlisting}[caption={Reporter per Bitcoin, liquidità e ricchezza complessiva degli agenti}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PORTAFOGLIO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report total-bitcoin
+  report sum [bitcoin-held] of turtles
+end
+
+to-report total-cash
+  report sum [cash-balance] of turtles
+end
+
+to-report total-wealth
+  let current-p model-price
+  if current-p <= 0 [ report total-cash ]
+  report total-cash + (total-bitcoin * current-p)
+end
+
+to-report bitcoin-a
+  report sum [bitcoin-held] of agents-a
+end
+
+to-report bitcoin-b
+  report sum [bitcoin-held] of agents-b
+end
+
+to-report bitcoin-c
+  report sum [bitcoin-held] of agents-c
+end
+\end{lstlisting}
+
+Questo blocco contiene alcuni reporter utili per misurare lo stato patrimoniale
+complessivo degli agenti. Il reporter \texttt{total-bitcoin} calcola la quantità
+totale di Bitcoin detenuta da tutti gli agenti:
+
+\[
+B_{\mathrm{tot}}=\sum_i B_i,
+\]
+
+dove \(B_i\) rappresenta la quantità di Bitcoin posseduta dall'agente \(i\).
+
+Il reporter \texttt{total-cash} calcola invece la liquidità complessiva del
+sistema:
+
+\[
+C_{\mathrm{tot}}=\sum_i C_i,
+\]
+
+dove \(C_i\) è il saldo monetario dell'agente \(i\).
+
+Il reporter \texttt{total-wealth} restituisce la ricchezza totale degli agenti,
+sommando la liquidità disponibile al valore in dollari dei Bitcoin posseduti:
+
+\[
+W_{\mathrm{tot}}
+=
+C_{\mathrm{tot}}
++
+B_{\mathrm{tot}}P_m,
+\]
+
+dove \(P_m\) è il prezzo endogeno del modello. Nel codice, tale prezzo è
+memorizzato nella variabile locale \texttt{current-p}. Se il prezzo non è
+positivo, il reporter restituisce soltanto la liquidità totale, evitando di
+valorizzare i Bitcoin con un prezzo nullo o negativo.
+
+Gli ultimi tre reporter calcolano la quantità totale di Bitcoin detenuta
+separatamente dalle tre specie:
+
+\[
+B_A = \sum_{i \in A} B_i,
+\qquad
+B_B = \sum_{i \in B} B_i,
+\qquad
+B_C = \sum_{i \in C} B_i.
+\]
+
+Nel codice questi valori corrispondono rispettivamente a \texttt{bitcoin-a},
+\texttt{bitcoin-b} e \texttt{bitcoin-c}. Queste grandezze permettono di
+confrontare la distribuzione dell'attività finanziaria tra i diversi gruppi di
+agenti.
+
+\subsection{Flocking dinamico con stubbornness variabile}
+
+\begin{lstlisting}[caption={Procedura di flocking dinamico degli agenti}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; FLOCKING DINAMICO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to flock
+
+  if any? flockmates [
+
+    let eff-stubbornness dynamic-stubbornness
+
+    let my-dx cos heading
+    let my-dy sin heading
+
+    let average-dx mean [cos heading] of flockmates
+    let average-dy mean [sin heading] of flockmates
+
+    let weighted-dx (eff-stubbornness * my-dx) + ((1 - eff-stubbornness) * average-dx)
+    let weighted-dy (eff-stubbornness * my-dy) + ((1 - eff-stubbornness) * average-dy)
+
+    if weighted-dx != 0 or weighted-dy != 0 [
+      set heading atan weighted-dx weighted-dy
+    ]
+
+    let speed sqrt (velocity-x ^ 2 + velocity-y ^ 2)
+
+    if speed > 0 [
+      set velocity-x speed * cos heading
+      set velocity-y speed * sin heading
+    ]
+  ]
+
+end
+\end{lstlisting}
+
+La procedura \texttt{flock} aggiorna la direzione di ogni agente sulla base dei
+suoi \texttt{flockmates}, cioè degli agenti che compongono la sua rete di
+riferimento. Il blocco viene eseguito solo se l'agente possiede almeno un vicino:
+
+\[
+\texttt{if any? flockmates [ ... ]}.
+\]
+
+Il primo valore calcolato è
+
+\[
+\texttt{eff-stubbornness} = \texttt{dynamic-stubbornness}.
+\]
+
+Questa quantità misura quanto l'agente tende a mantenere la propria direzione
+precedente. Una stubbornness alta rende l'agente più conservativo; una
+stubbornness bassa lo rende più sensibile alla direzione media dei suoi
+\texttt{flockmates}.
+
+La direzione attuale dell'agente viene trasformata nelle sue componenti
+vettoriali:
+
+\[
+d_x = \cos(\theta),
+\qquad
+d_y = \sin(\theta),
+\]
+
+dove \(\theta\) è il valore corrente di \texttt{heading}. Il codice calcola poi
+anche la direzione media dei \texttt{flockmates}:
+
+\[
+\bar{d}_x = \left\langle \cos(\theta_j) \right\rangle,
+\qquad
+\bar{d}_y = \left\langle \sin(\theta_j) \right\rangle.
+\]
+
+Il nuovo orientamento è ottenuto come combinazione pesata tra la direzione
+individuale dell'agente e la direzione media del gruppo:
+
+\[
+d_x^{\mathrm{new}}
+=
+s d_x
++
+(1-s)\bar{d}_x,
+\]
+
+\[
+d_y^{\mathrm{new}}
+=
+s d_y
++
+(1-s)\bar{d}_y,
+\]
+
+dove \(s\) rappresenta la stubbornness efficace. Nel codice queste due componenti
+sono \texttt{weighted-dx} e \texttt{weighted-dy}.
+
+Se il vettore risultante non è nullo, il valore di \texttt{heading} viene
+aggiornato tramite
+
+\[
+\texttt{set heading atan weighted-dx weighted-dy}.
+\]
+
+In questo modo l'agente non copia semplicemente la direzione media dei vicini,
+ma si orienta verso una direzione intermedia tra il proprio stato precedente e lo
+stato collettivo del gruppo.
+
+Dopo aver aggiornato la direzione, la procedura calcola il modulo della velocità:
+
+\[
+v =
+\sqrt{
+\texttt{velocity-x}^2
++
+\texttt{velocity-y}^2
+}.
+\]
+
+Se la velocità è positiva, le componenti \texttt{velocity-x} e
+\texttt{velocity-y} vengono ricostruite usando lo stesso modulo \(v\), ma con la
+nuova direzione:
+
+\[
+v_x = v\cos(\theta),
+\qquad
+v_y = v\sin(\theta).
+\]
+
+Questa scelta modifica l'orientamento del moto senza alterare direttamente la
+velocità scalare dell'agente. La procedura realizza quindi un meccanismo di
+allineamento dinamico: gli agenti tendono a coordinarsi con la propria rete, ma
+la forza dell'allineamento dipende dallo stato di stubbornness, che a sua volta
+può variare con l'hype di mercato.
+
+\subsection{Medie della posizione verticale delle specie}
+
+\begin{lstlisting}[caption={Reporter per la posizione media lungo l'asse \(y\) delle specie A e B}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; MEDIE DI POSIZIONE Y
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report mean-y-a
+  if count agents-a = 0 [ report 0 ]
+  report mean [ycor] of agents-a
+end
+
+to-report mean-y-b
+  if count agents-b = 0 [ report 0 ]
+  report mean [ycor] of agents-b
+end
+\end{lstlisting}
+
+Questi due reporter calcolano la posizione media lungo l'asse verticale delle
+specie \texttt{agents-a} e \texttt{agents-b}. La coordinata \(y\) è rilevante
+perché, nel modello, distingue la zona associata all'acquisto da quella associata
+alla vendita.
+
+Il reporter \texttt{mean-y-a} restituisce
+
+\[
+\bar{y}_A =
+\frac{1}{N_A}
+\sum_{i \in A} y_i,
+\]
+
+dove \(N_A\) è il numero di agenti della specie A e \(y_i\) è la coordinata
+verticale dell'agente \(i\). Prima del calcolo, il codice controlla che la specie
+A non sia vuota:
+
+\[
+\texttt{if count agents-a = 0 [ report 0 ]}.
+\]
+
+Questo evita di calcolare una media su un insieme privo di agenti.
+
+In modo analogo, il reporter \texttt{mean-y-b} calcola
+
+\[
+\bar{y}_B =
+\frac{1}{N_B}
+\sum_{i \in B} y_i.
+\]
+
+Queste quantità permettono di monitorare la posizione media delle due specie
+nello spazio comportamentale. Se la media è positiva, la specie si trova
+prevalentemente nella regione associata all'acquisto; se è negativa, si trova
+prevalentemente nella regione associata alla vendita.
+
+Il confronto tra \(\bar{y}_A\) e \(\bar{y}_B\) consente quindi di osservare se le
+due popolazioni tendono a muoversi nella stessa direzione oppure se sviluppano
+comportamenti opposti.
+
+\subsection{Stima della pendenza tramite regressione lineare}
+
+\begin{lstlisting}[caption={Reporter per il calcolo della pendenza di una regressione lineare}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; REGRESSIONE LINEARE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report linear-regression-slope [ ys ]
+
+  let n length ys
+  if n < 2 [ report 0 ]
+
+  let xs n-values n [ i -> i ]
+  let mean-x mean xs
+  let mean-y mean ys
+
+  let num sum (map [ [x y] -> (x - mean-x) * (y - mean-y) ] xs ys)
+  let den sum (map [ x -> (x - mean-x) ^ 2 ] xs)
+
+  if den = 0 [ report 0 ]
+
+  report num / den
+
+end
+\end{lstlisting}
+
+Il reporter \texttt{linear-regression-slope} calcola la pendenza della retta di
+regressione lineare associata a una serie di valori \texttt{ys}. L'obiettivo è
+stimare se una quantità osservata nel tempo tende mediamente ad aumentare,
+diminuire oppure rimanere stabile.
+
+La lista \texttt{ys} contiene i valori osservati, mentre le ascisse vengono
+generate automaticamente tramite
+
+\[
+\texttt{let xs n-values n [ i -> i ]}.
+\]
+
+In questo modo, a una lista di \(n\) valori
+
+\[
+y_0,y_1,\dots,y_{n-1}
+\]
+
+viene associata la sequenza temporale
+
+\[
+x_0=0,\quad x_1=1,\quad \dots,\quad x_{n-1}=n-1.
+\]
+
+Se la lista contiene meno di due valori, il reporter restituisce \(0\), perché
+non è possibile stimare una pendenza significativa con un solo punto.
+
+Il codice calcola poi le medie delle ascisse e delle ordinate:
+
+\[
+\bar{x} = \frac{1}{n}\sum_i x_i,
+\qquad
+\bar{y} = \frac{1}{n}\sum_i y_i.
+\]
+
+La pendenza della regressione lineare viene calcolata come
+
+\[
+b =
+\frac{
+\sum_i (x_i-\bar{x})(y_i-\bar{y})
+}{
+\sum_i (x_i-\bar{x})^2
+}.
+\]
+
+Nel codice, il numeratore è memorizzato nella variabile \texttt{num}, mentre il
+denominatore è memorizzato in \texttt{den}. Se \texttt{den} è nullo, il reporter
+restituisce \(0\), evitando una divisione non valida.
+
+Il valore finale
+
+\[
+\texttt{report num / den}
+\]
+
+rappresenta quindi la pendenza stimata. Se la pendenza è positiva, la serie
+\texttt{ys} mostra una tendenza crescente; se è negativa, mostra una tendenza
+decrescente; se è vicina a zero, non presenta una tendenza lineare marcata.
+
+\subsection{Correlazione di Pearson generica}
+
+\begin{lstlisting}[caption={Reporter generico per il calcolo della correlazione di Pearson}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CORRELAZIONE DI PEARSON (GENERICA)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report pearson-correlation [ xs ys ]
+
+  let n length xs
+  if n < 2 [ report 0 ]
+
+  let mean-x mean xs
+  let mean-y mean ys
+
+  let cov sum (map [ [x y] -> (x - mean-x) * (y - mean-y) ] xs ys)
+  let sx sqrt sum (map [ x -> (x - mean-x) ^ 2 ] xs)
+  let sy sqrt sum (map [ y -> (y - mean-y) ^ 2 ] ys)
+
+  if (sx = 0) or (sy = 0) [ report 0 ]
+
+  report cov / (sx * sy)
+
+end
+\end{lstlisting}
+
+Il reporter \texttt{pearson-correlation} calcola la correlazione di Pearson tra
+due liste numeriche, indicate come \texttt{xs} e \texttt{ys}. Questo reporter è
+generico, quindi può essere riutilizzato per confrontare serie temporali diverse,
+come prezzi, volumi, parametri d'ordine o altre grandezze dinamiche del modello.
+
+La variabile
+
+\[
+n = \texttt{length xs}
+\]
+
+rappresenta il numero di osservazioni considerate. Se la lista contiene meno di
+due elementi, il reporter restituisce \(0\), perché non è possibile calcolare una
+correlazione significativa con un solo dato.
+
+Vengono poi calcolate le medie delle due serie:
+
+\[
+\bar{x} = \texttt{mean xs},
+\qquad
+\bar{y} = \texttt{mean ys}.
+\]
+
+La quantità \texttt{cov} rappresenta la covarianza non normalizzata tra le due
+serie:
+
+\[
+\text{cov}
+=
+\sum_i
+(x_i-\bar{x})(y_i-\bar{y}).
+\]
+
+Le quantità \texttt{sx} e \texttt{sy} rappresentano invece le deviazioni standard
+non normalizzate:
+
+\[
+s_x =
+\sqrt{
+\sum_i (x_i-\bar{x})^2
+},
+\qquad
+s_y =
+\sqrt{
+\sum_i (y_i-\bar{y})^2
+}.
+\]
+
+Se una delle due serie è costante, allora una delle due deviazioni standard è
+uguale a zero. In quel caso il reporter restituisce \(0\), evitando una divisione
+per zero:
+
+\[
+\texttt{if (sx = 0) or (sy = 0) [ report 0 ]}.
+\]
+
+Se entrambe le serie hanno variazione non nulla, la correlazione di Pearson viene
+calcolata come
+
+\[
+r =
+\frac{\text{cov}}{s_x s_y}.
+\]
+
+Il valore restituito è compreso tra \(-1\) e \(1\). Un valore vicino a \(1\)
+indica una relazione lineare positiva, un valore vicino a \(-1\) indica una
+relazione lineare negativa, mentre un valore vicino a \(0\) indica assenza di una
+relazione lineare evidente.
+
+Nel modello, questa procedura è utile perché permette di misurare in modo
+uniforme quanto due grandezze evolvano insieme nel tempo, senza dover riscrivere
+ogni volta il calcolo della correlazione.
+
+\subsection{Indice di eterogeneità della popolazione}
+
+\begin{lstlisting}[caption={Reporter per l'indice di eterogeneità delle specie}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; INDICE DI ETEROGENEITA'
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report heterogeneity-index
+
+  let tot population-a + population-b + population-c
+  if tot = 0 [ report 0 ]
+
+  let sa population-a / tot
+  let sb population-b / tot
+  let sc population-c / tot
+
+  report (sa ^ 2) + (sb ^ 2) + (sc ^ 2)
+
+end
+\end{lstlisting}
+
+Il reporter \texttt{heterogeneity-index} calcola un indice basato sulla
+distribuzione relativa delle tre popolazioni di agenti. La variabile
+
+\[
+\texttt{tot}
+=
+\texttt{population-a}
++
+\texttt{population-b}
++
+\texttt{population-c}
+\]
+
+rappresenta il numero complessivo di agenti previsto nel modello. Se questo
+valore è nullo, il reporter restituisce \(0\), evitando divisioni non valide.
+
+Successivamente vengono calcolate le quote relative delle tre specie:
+
+\[
+s_A =
+\frac{\texttt{population-a}}{\texttt{tot}},
+\qquad
+s_B =
+\frac{\texttt{population-b}}{\texttt{tot}},
+\qquad
+s_C =
+\frac{\texttt{population-c}}{\texttt{tot}}.
+\]
+
+Il valore finale restituito è
+
+\[
+H =
+s_A^2+s_B^2+s_C^2.
+\]
+
+Questo indice misura quanto la popolazione sia concentrata in poche specie.
+Se le tre specie hanno dimensioni simili, le quote sono distribuite in modo più
+uniforme e il valore di \(H\) è più basso. Se invece una specie domina sulle
+altre, una delle quote è molto grande e il valore di \(H\) aumenta.
+
+Nel caso di tre specie perfettamente bilanciate si ha
+
+\[
+s_A=s_B=s_C=\frac{1}{3},
+\]
+
+quindi
+
+\[
+H=
+3\left(\frac{1}{3}\right)^2
+=
+\frac{1}{3}.
+\]
+
+Se invece tutta la popolazione appartiene a una sola specie, ad esempio
+
+\[
+s_A=1,
+\qquad
+s_B=s_C=0,
+\]
+
+allora
+
+\[
+H=1.
+\]
+
+Quindi il valore dell'indice varia tra \(1/3\) e \(1\): valori più bassi indicano
+una popolazione più bilanciata tra le specie, mentre valori più alti indicano una
+maggiore concentrazione in una singola specie.
+
+\subsection{Aggiornamento delle metriche di stabilità}
+
+\begin{lstlisting}[caption={Procedura di aggiornamento delle metriche di stabilità del sistema}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; AGGIORNAMENTO METRICHE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to aggiorna-metriche-stabilita
+
+  set op-history lput order-parameter op-history
+  if length op-history > window-size [ set op-history but-first op-history ]
+
+  set ya-history lput mean-y-a ya-history
+  if length ya-history > window-size [ set ya-history but-first ya-history ]
+
+  set yb-history lput mean-y-b yb-history
+  if length yb-history > window-size [ set yb-history but-first yb-history ]
+
+  ifelse length op-history >= window-size [
+    let log-op map [ v -> ln (v + 0.0001) ] op-history
+    set lambda-instability linear-regression-slope log-op
+  ][
+    set lambda-instability 0
+  ]
+
+  ifelse length ya-history >= window-size [
+    set phase-correlation-ab pearson-correlation ya-history yb-history
+  ][
+    set phase-correlation-ab 0
+  ]
+
+  set heterogeneity-index-value heterogeneity-index
+
+end
+
+to aggiorna-plot-stabilita
+end
+\end{lstlisting}
+
+La procedura \texttt{aggiorna-metriche-stabilita} aggiorna alcune grandezze
+utilizzate per descrivere la stabilità e la struttura collettiva del sistema.
+Le tre serie storiche principali sono:
+
+\[
+\texttt{op-history},
+\qquad
+\texttt{ya-history},
+\qquad
+\texttt{yb-history}.
+\]
+
+La prima contiene lo storico del parametro d'ordine globale, mentre le altre due
+contengono le posizioni medie lungo l'asse \(y\) delle specie A e B.
+
+A ogni chiamata, il valore corrente del parametro d'ordine viene aggiunto a
+\texttt{op-history}:
+
+\[
+\texttt{set op-history lput order-parameter op-history}.
+\]
+
+In modo analogo, \texttt{mean-y-a} e \texttt{mean-y-b} vengono aggiunti
+rispettivamente a \texttt{ya-history} e \texttt{yb-history}. Per ciascuna lista
+viene poi applicata una finestra mobile di ampiezza \texttt{window-size}: se la
+lista diventa troppo lunga, il primo elemento viene eliminato con
+\texttt{but-first}. In questo modo le metriche vengono calcolate solo sulla
+dinamica recente del sistema.
+
+Quando \texttt{op-history} ha raggiunto la lunghezza \texttt{window-size}, il
+modello calcola una stima di instabilità:
+
+\[
+\lambda =
+\text{slope}
+\left[
+\log(\Phi(t)+0.0001)
+\right],
+\]
+
+dove \(\Phi(t)\) è il parametro d'ordine. Nel codice, la lista logaritmica è
+costruita tramite
+
+\[
+\texttt{let log-op map [ v -> ln (v + 0.0001) ] op-history}.
+\]
+
+Il termine \(0.0001\) evita di calcolare il logaritmo di zero. La pendenza della
+regressione lineare viene poi calcolata con
+
+\[
+\texttt{linear-regression-slope log-op}.
+\]
+
+Il risultato viene salvato in \texttt{lambda-instability}. Se questa quantità è
+positiva, il parametro d'ordine tende a crescere nel tempo; se è negativa, tende
+a diminuire; se è vicina a zero, il livello di ordine collettivo è
+approssimativamente stabile.
+
+Quando anche gli storici \texttt{ya-history} e \texttt{yb-history} hanno
+raggiunto la lunghezza richiesta, il modello calcola la correlazione di Pearson
+tra le posizioni medie verticali delle specie A e B:
+
+\[
+r_{AB}
+=
+\mathrm{corr}
+\left(
+\bar{y}_A,
+\bar{y}_B
+\right).
+\]
+
+Nel codice:
+
+\[
+\texttt{set phase-correlation-ab pearson-correlation ya-history yb-history}.
+\]
+
+Questa metrica misura se le due specie tendono a muoversi verticalmente in modo
+coordinato. Un valore positivo indica movimenti mediamente concordi, un valore
+negativo indica movimenti opposti, mentre un valore vicino a zero indica assenza
+di una relazione lineare evidente.
+
+Infine, il codice aggiorna l'indice di eterogeneità:
+
+\[
+\texttt{set heterogeneity-index-value heterogeneity-index}.
+\]
+
+Questa variabile conserva il valore dell'indice che misura quanto la popolazione
+sia bilanciata o concentrata tra le tre specie.
+
+La procedura \texttt{aggiorna-plot-stabilita} è invece attualmente vuota. Essa
+può essere interpretata come un placeholder, cioè una procedura predisposta per
+un eventuale futuro aggiornamento dei grafici relativi alle metriche di
+stabilità.
