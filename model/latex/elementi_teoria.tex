@@ -1,0 +1,1191 @@
+\section{Elementi di teoria}
+\subsection{Introduzione}
+Per la calibrazione dei nostro modello agent-based utilizzeremo il metodo noto come Method of Simulated Moments (MSM).
+Non chiediamo al modello di riprodurre una particolare traiettoria reale, ma di riprodurre le proprietà statistiche che caratterizzano il 
+processo che l'ha generata. Come prima cosa si decide quali fenomeni il modello deve spiegare dopodichè si determina quali osservabili 
+macroscopiche ha senso confrontare con i dati. Per essere più precisi, indichiamo con $\boldsymbol{\theta} =(\theta_1,\theta_2,\ldots,\theta_p)$
+il vettore dei parametri controllabili dell'ABM. Nel nostro caso comprende, per esempio, temperature, hype-sensitivity, price-sensitivity, \(k\), \(h\),
+le dimensioni delle popolazioni e l'intensità delle interazioni.
+Indichiamo invece con $\mathbf{S} =(S_1,S_2,\ldots,S_q)$ il vettore delle statistiche macroscopiche che vogliamo riprodurre.
+Dai dati reali di Bitcoin ricaviamo un vettore di stime $\widehat{\mathbf{S}}_{\mathrm{real}}$.
+Eseguendo molte simulazioni indipendenti, tutte con gli stessi parametri \(\boldsymbol{\theta}\) ma con semi casuali diversi (condizioni iniziali), otteniamo:
+$\widehat{\mathbf{S}}^{(1)}(\boldsymbol{\theta}),\ldots,\widehat{\mathbf{S}}^{(M)}(\boldsymbol{\theta})$
+Possiamo quindi stimare i valori medi prodotti dal modello:
+\[
+\overline{\mathbf{S}}_{\mathrm{ABM}}(\boldsymbol{\theta})
+=
+\frac{1}{M}
+\sum_{j=1}^{M}
+\widehat{\mathbf{S}}^{(j)}(\boldsymbol{\theta}).
+\]
+L'obiettivo è trovare parametri \(\boldsymbol{\theta}^*\) che minimizzino la distanza statistica tra il sistema reale e quello simulato:
+\[
+\boldsymbol{\theta}^{*}
+=
+\arg\min_{\boldsymbol{\theta}}
+\left[
+\overline{\mathbf{S}}_{\mathrm{ABM}}(\boldsymbol{\theta})
+-
+\widehat{\mathbf{S}}_{\mathrm{real}}
+\right]^{T}
+W
+\left[
+\overline{\mathbf{S}}_{\mathrm{ABM}}(\boldsymbol{\theta})
+-
+\widehat{\mathbf{S}}_{\mathrm{real}}
+\right]
+\]
+dove \(W\) è una matrice di pesi che permette di attribuire importanza diversa alle varie statistiche e tenere conto delle loro scale e, se stimabili, 
+delle loro incertezze. Alla luce di questa spiegazione possiamo anche definire in modo rigoroso l'obiettivo scientifico del nostro modello, che possiamo
+formulare nel seguente modo: "Determinare se un sistema costituito da agenti eterogenei, governati da regole semplici di trading, flocking e interazione, 
+possa generare spontaneamente serie temporali di prezzi e volumi con proprietà statistiche compatibili con quelle osservate nel mercato Bitcoin".
+
+\subsection{Come organizzare la simulazione}
+La procedura che possiamo seguire è la seguente:
+\begin{enumerate}
+    \item Selezione dei dati reali. Scegliamo una serie storica di prezzo e volume di Bitcoin. 
+    Dobbiamo anche definire se il volume rappresenti un singolo exchange oppure un aggregato di mercato.
+    \begin{approfondimento}
+        Bitcoin non viene scambiato su un unico mercato centralizzato, ma su numerose piattaforme di compravendita, chiamate exchange, 
+        come Coinbase , Binance e Kraken. Ogni exchange registra autonomamente il prezzo delle transazioni e i volumi scambiati. Di conseguenza, 
+        quando parliamo di volume giornaliero di Bitcoin, dobbiamo specificare esattamente a quali transazioni ci riferiamo.
+        Se utilizziamo i dati di un singolo exchange, possiamo interpretare il nostro ABM come una rappresentazione semplificata degli operatori che 
+        scambiano su quella piattaforma. Se invece utilizziamo dati aggregati, il modello rappresenterebbe un mercato più ampio, composto da 
+        operatori distribuiti tra diverse piattaforme.Questa distinzione influenza soprattutto la scala dei volumi.
+        Inoltre, il prezzo non è necessariamente identico su tutti gli exchange: piccole differenze possono derivare dalla liquidità, dalla struttura 
+        degli ordini e dalle condizioni operative dei singoli mercati.Inoltre, il prezzo non è necessariamente identico su tutti gli exchange: piccole 
+        differenze possono derivare dalla liquidità, dalla struttura degli ordini e dalle condizioni operative dei singoli mercati.
+    \end{approfondimento}
+    \item Stima delle statistiche empiriche. Calcoliamo le statistiche selezionate e la loro incertezza. Poiché i dati sono temporalmente correlati, 
+    possiamo utilizzare tecniche come il block bootstrap (vedremo dopo) per ottenere intervalli di confidenza.
+    \item Simulazioni Monte Carlo. Fissiamo \(\boldsymbol{\theta}\), eseguiamo inizialmente, per esempio, 100--200 simulazioni indipendenti e 
+    stimiamo media e dispersione delle statistiche simulate.
+    \item Calibrazione. Modifichiamo i parametri fenomenologici per minimizzare la funzione obiettivo. Possiamo iniziare con una ricerca su griglia o 
+    casuale e passare successivamente a metodi più efficienti.
+    \begin{approfondimento}
+        Una volta definita la funzione obiettivo della calibrazione, dobbiamo scegliere un algoritmo che individui i valori dei parametri 
+        fenomenologici dell'ABM capaci di riprodurre meglio le statistiche macroscopiche del mercato reale. Questo è un problema di ottimizzazione 
+        numerica, con una difficoltà aggiuntiva: il nostro modello è stocastico, cioè un certo insieme di parametri potrebbe sembrare 
+        migliore di un altro soltanto per fluttuazioni statistiche. Esistono alcuni algoritmi i più semplici sono grid search dove per er ciascun parametro definiamo un 
+        insieme discreto di valori e proviamo tutte le combinazioni possibili, che ha chiaramente uno svantaggio dal punto di vista computazionale, e
+        random search, dove estraiamo casualmente combinazioni di parametri all'interno degli intervalli consentiti. Per citare un metodo più 
+        sofisticato, possiamo considerare l'algoritmo di ottimizzazione bayesiana, che potrebbe essere utile quando il costo computazionale di una 
+        singola simulazione è elevato. 
+    \end{approfondimento}
+    \item Validazione. Una volta scelti i parametri, verifichiamo che il modello riproduca le statistiche anche su dati non utilizzati per la 
+    calibrazione. Qui non dobbiamo modificare nuovamente i parametri per inseguire i risultati.
+    \item Studio dei meccanismi. Variamo singolarmente o congiuntamente i parametri, disattiviamo, hype o interazioni tra specie e 
+    studiamo come cambiano le osservabili macroscopiche.
+\end{enumerate}
+
+Nella prima parte dei dati scegliamo i parametri. Nella seconda controlliamo se le scelte generalizzano e selezioniamo eventuali modifiche strutturali. 
+Nella terza, mai utilizzata durante lo sviluppo, misuriamo le prestazioni finali. Per una serie finanziaria non basta necessariamente una sola 
+divisione temporale. Bitcoin attraversa regimi differenti e le sue proprietà statistiche possono cambiare nel tempo. Per questo sarà utile ripetere 
+l'analisi su più periodi e confrontare separatamente fasi calme, rialziste e turbolente, evitando di classificare i regimi sulla base dei risultati 
+del modello stesso. Un risultato interessante sarebbe verificare che la medesima parametrizzazione riesca a riprodurre diverse proprietà statistiche 
+in periodi differenti.
+
+
+\subsection{Statistiche macroscopiche}
+Il nostro modello parte dal presupposto che la definizione di mercato reale sia quella di un sistema finanziario caratterizzato da dal prezzo e dai volumi 
+scambiati in un certo intervallo temporale. In particolare abbiamo considerato una serie \(T+1\) osservazioni giornaliere, con:
+
+\begin{itemize}
+    \item $P_t$ prezzo di Bitcoin in USD alla fine del giorno \(t\);
+    \item \(V_t\): volume effettivamente scambiato durante il giorno \(t\), espresso in USD.
+\end{itemize}
+
+Perciò le variabili su cui dovremo concentrare la nostra analisi saranno delle grandezze statistiche legate a \(P_t\) e \(V_t\). In particolare, abbiamo che
+spesso, per quanto riguarda i prezzi, si preferisce lavorare l log-rendimento:
+\[
+r_t=\ln\left(\frac{P_t}{P_{t-1}}\right),\qquad t=1,\ldots,T.
+\]
+mentre per il volume introduciamo una trasformazione logaritmica:
+\[
+v_t=\ln\left(1+\frac{V_t}{V_*}\right),
+\]
+dove \(V_*>0\) è una scala di riferimento fissata usando esclusivamente il campione di calibrazione, e mantenuta identica per dati reali e simulati.
+Questa trasformazione riduce l'influenza degli enormi picchi di volume, preservando comunque l'informazione sulla loro intensità.
+Il sistema reale viene quindi rappresentato attraverso un processo stocastico bivariato $\mathbf X_t=(r_t,v_t)$.
+Il compito dell'ABM sarà generare un processo \(\mathbf X_t^{\mathrm{ABM}}\) statisticamente compatibile con quello empirico. 
+Per ora, per introduciamo un numero limitato di statistiche, questo perchè più statistiche introduciamo, più difficile diventa comprendere quali 
+meccanismi siano effettivamente responsabili dell'accordo con i dati. Consideriamo otto statistiche che dividiamo in 3 gruppi (la definizione rigorosa
+è subito dopo le tabelle):
+
+\begin{enumerate}
+    \item Statistiche dei rendimenti
+        \begin{table}[h]
+            \centering
+            \small
+            \renewcommand{\arraystretch}{1.35}
+            \begin{tabularx}{\textwidth}{X c X}
+            \toprule
+            \textbf{Statistica} 
+            & \textbf{Simbolo} 
+            & \textbf{Proprietà fisico-finanziaria} \\
+            \midrule
+
+            Deviazione standard dei log-rendimenti
+            & $S_1 = \sigma_r$
+            & Scala delle fluttuazioni del prezzo \\
+
+            Quantile al $99\%$ di $|r_t|$
+            & $S_2 = Q_{0.99}(|r|)$
+            & Intensità degli eventi estremi \\
+
+            Autocorrelazione di $|r_t|$, ritardo $1$
+            & $S_3 = \rho_{|r|}(1)$
+            & Persistenza della volatilità a breve termine \\
+
+            Autocorrelazione di $|r_t|$, ritardo $7$
+            & $S_4 = \rho_{|r|}(7)$
+            & Persistenza della volatilità a una settimana \\
+
+            \bottomrule
+            \end{tabularx}
+            \caption{Statistiche utilizzate per caratterizzare i rendimenti.}
+            \label{tab:statistiche-rendimenti}
+        \end{table}
+    \item Statistiche dei volumi
+        \begin{table}[h]
+            \centering
+            \small
+            \renewcommand{\arraystretch}{1.35}
+            \begin{tabularx}{\textwidth}{X c X}
+            \toprule
+            \textbf{Statistica} 
+            & \textbf{Simbolo} 
+            & \textbf{Proprietà} \\
+            \midrule
+
+            Mediana dei log-volumi
+            & $S_5 = \operatorname{Med}(v)$
+            & Livello tipico dell'attività di mercato \\
+
+            Deviazione standard dei log-volumi
+            & $S_6 = \sigma_v$
+            & Variabilità dell'attività di trading \\
+
+            Autocorrelazione dei log-volumi, ritardo $1$
+            & $S_7 = \rho_v(1)$
+            & Persistenza temporale dell'attività di trading \\
+
+            \bottomrule
+            \end{tabularx}
+            \caption{Statistiche utilizzate per caratterizzare i log-volumi.}
+            \label{tab:statistiche-log-volumi}
+        \end{table}
+    \item Statistica congiunta prezzo-volume: una proprietà particolarmente importante per il nostro progetto è la relazione tra attività di trading e 
+    intensità delle variazioni del prezzo $S_8=\operatorname{Corr}(v_t,|r_t|)$.Questa correlazione misura se i periodi caratterizzati da fluttuazioni 
+    intense sono associati a una maggiore attività di mercato. Un ABM potrebbe riprodurre correttamente la distribuzione dei rendimenti e quella dei 
+    volumi separatamente, ma non la loro relazione reciproca. In quel caso mancherebbe un elemento fondamentale della dinamica finanziaria.
+\end{enumerate}
+
+quindi complessivamente il vettore delle statistiche è:
+
+\[
+\mathbf S=
+\begin{pmatrix}
+\sigma_r\\
+Q_{0.99}(|r|)\\
+\rho_{|r|}(1)\\
+\rho_{|r|}(7)\\
+\operatorname{Med}(v)\\
+\sigma_v\\
+\rho_v(1)\\
+\operatorname{Corr}(v,|r|)
+\end{pmatrix}.
+\]
+
+\subsubsection{Definizione matematica degli stimatori}
+\textbf{Media e deviazione standard}\\
+Per una serie \(x_1,\ldots,x_T\), definiamo:
+\[
+\widehat\mu_x=\frac{1}{T}\sum_{t=1}^{T}x_t
+\]
+e
+\[
+\widehat\sigma_x=
+\sqrt{\frac{1}{T-1}\sum_{t=1}^{T}(x_t-\widehat\mu_x)^2}.
+\]
+Applicando questo stimatore ai rendimenti otteniamo \(\widehat S_1\); applicandolo ai log-volumi otteniamo \(\widehat S_6\).\\
+\textbf{Quantile degli eventi estremi}\\
+Lo stimatore \(\widehat S_2\) è il quantile empirico al livello \(0.99\) della serie:
+\[
+|r_1|,|r_2|,\ldots,|r_T|.
+\]
+
+Utilizzeremo la stessa convenzione di interpolazione dei quantili in tutte le elaborazioni.
+Il quantile è una misura diretta dell'ampiezza dei movimenti estremi. Come controllo secondario potremo considerare anche la curtosi in eccesso, 
+che però può essere particolarmente instabile in presenza di osservazioni estreme.\\
+\textbf{Autocorrelazione}\\
+Per una serie \(x_t\), lo stimatore dell'autocorrelazione al ritardo \(\ell\) è:
+\[
+\widehat\rho_x(\ell)=
+\frac{
+\displaystyle\sum_{t=\ell+1}^{T}
+(x_t-\widehat\mu_x)
+(x_{t-\ell}-\widehat\mu_x)
+}{
+\displaystyle\sum_{t=1}^{T}(x_t-\widehat\mu_x)^2
+}.
+\]
+
+Da questa espressione ricaviamo:
+\[
+\widehat S_3=\widehat\rho_{|r|}(1),
+\qquad
+\widehat S_4=\widehat\rho_{|r|}(7),
+\qquad
+\widehat S_7=\widehat\rho_v(1).
+\]
+\textbf{Correlazione prezzo-volume}\\
+La correlazione congiunta viene stimata mediante:
+\[
+\widehat S_8=
+\frac{
+\sum_t(v_t-\bar v)(|r_t|-\overline{|r|})
+}{
+\sqrt{\sum_t(v_t-\bar v)^2}
+\sqrt{\sum_t(|r_t|-\overline{|r|})^2}
+}.
+\]
+Il risultato appartiene all'intervallo \([-1,1]\). Se una delle serie è costante, la correlazione è matematicamente non definita: in fase di validazione non la considereremo equivalente a zero, ma registreremo il caso come una degenerazione del modello.
+Per la mediana dei log-volumi, \(\widehat S_5\), utilizzeremo la mediana campionaria ordinaria.
+Queste definizioni costituiscono il nostro protocollo di misurazione. Non dovranno cambiare durante la calibrazione.
+
+\subsection{Stima dell'incertezza delle statistiche empiriche}
+
+Le statistiche macroscopiche introdotte precedentemente non sono quantità note
+esattamente, ma vengono stimate a partire da un numero finito di osservazioni
+del mercato reale. Di conseguenza, ogni statistica empirica è soggetta a una
+certa incertezza.
+
+Indicando con $S_i$ una generica proprietà statistica del processo reale,
+la sua stima campionaria sarà
+
+\[
+\widehat{S}_i^{\mathrm{real}}.
+\]
+
+L'obiettivo è associare a ciascuna stima una misura della sua incertezza,
+generalmente rappresentata dall'errore standard:
+
+\[
+\operatorname{SE}\left(\widehat{S}_i^{\mathrm{real}}\right).
+\]
+
+L'errore standard quantifica la variabilità che lo stimatore presenterebbe
+se fosse possibile ripetere il campionamento dal medesimo processo stocastico.
+Non deve essere confuso con la deviazione standard delle osservazioni:
+quest'ultima descrive la variabilità dei dati, mentre l'errore standard
+descrive l'incertezza della statistica stimata.
+
+\subsubsection{Dipendenza temporale e volatility clustering}
+
+Una delle principali difficoltà nell'analisi delle serie finanziarie consiste
+nel fatto che le osservazioni successive non sono necessariamente indipendenti.
+
+Nei mercati finanziari si osserva frequentemente un fenomeno noto come
+\textit{volatility clustering}, o raggruppamento temporale della volatilità.
+
+Questo fenomeno consiste nella tendenza delle variazioni di prezzo di grande
+ampiezza a concentrarsi temporalmente: periodi caratterizzati da forti
+oscillazioni sono spesso seguiti da altri periodi di elevata volatilità,
+mentre periodi relativamente tranquilli tendono a essere seguiti da ulteriori
+periodi di bassa volatilità.
+
+Per comprendere matematicamente questo comportamento, consideriamo i
+log-rendimenti:
+
+\[
+r_t = \ln\left(\frac{P_t}{P_{t-1}}\right).
+\]
+
+In numerose serie finanziarie, l'autocorrelazione dei rendimenti è relativamente
+debole:
+
+\[
+\operatorname{Corr}(r_t,r_{t+\tau}) \approx 0,
+\]
+
+mentre quella dei rendimenti assoluti, oppure dei rendimenti quadratici,
+può risultare positiva e persistente:
+
+\[
+\operatorname{Corr}(|r_t|,|r_{t+\tau}|)>0,
+\]
+
+\[
+\operatorname{Corr}(r_t^2,r_{t+\tau}^2)>0.
+\]
+
+I rendimenti assoluti e quadratici vengono quindi frequentemente utilizzati
+come indicatori dell'intensità delle fluttuazioni, pur non coincidendo
+necessariamente con la volatilità condizionale del processo.
+
+Questo significa che la direzione delle variazioni future del prezzo può
+essere difficilmente prevedibile, mentre la loro intensità può presentare
+una significativa dipendenza temporale.
+
+Il volatility clustering costituisce quindi una proprietà statistica che
+desideriamo verificare e, se presente nei dati reali, riprodurre attraverso
+il modello agent-based.
+
+La presenza di dipendenze temporali deve essere considerata anche durante
+la stima dell'incertezza statistica. In particolare, non possiamo trattare
+automaticamente tutte le osservazioni come realizzazioni indipendenti
+della medesima distribuzione.
+
+\subsubsection{Il metodo bootstrap}
+
+Il \textit{bootstrap} è una tecnica statistica di ricampionamento che permette
+di stimare l'incertezza di una statistica utilizzando direttamente i dati
+osservati.
+
+Supponiamo di disporre di un campione
+
+\[
+X=(x_1,x_2,\ldots,x_T)
+\]
+
+e di voler stimare una certa statistica $S$, ad esempio la media,
+la varianza, un quantile oppure una correlazione.
+
+Calcoliamo inizialmente lo stimatore sul campione originale:
+
+\[
+\widehat{S}=S(X).
+\]
+
+L'idea del bootstrap consiste nel costruire artificialmente molti nuovi
+campioni, detti \textit{campioni bootstrap}, estraendo osservazioni dal
+campione originale con reinserimento.
+
+L'estrazione con reinserimento significa che una stessa osservazione può
+essere selezionata più volte, mentre altre osservazioni possono non comparire
+nel nuovo campione.
+
+Ogni campione bootstrap ha normalmente la stessa numerosità $T$ del campione
+originale:
+
+\[
+X^{*(b)}
+=
+(x_1^{*(b)},x_2^{*(b)},\ldots,x_T^{*(b)}),
+\]
+
+dove $b=1,\ldots,B$ identifica la replica bootstrap.
+
+Per ciascuna replica si calcola nuovamente la statistica:
+
+\[
+\widehat{S}^{*(b)}=S(X^{*(b)}).
+\]
+
+Ripetendo la procedura $B$ volte, si ottiene una distribuzione empirica
+dello stimatore:
+
+\[
+\left\{
+\widehat{S}^{*(1)},
+\widehat{S}^{*(2)},
+\ldots,
+\widehat{S}^{*(B)}
+\right\}.
+\]
+
+Questa distribuzione permette di approssimare la variabilità campionaria
+dello stimatore originale.
+
+In particolare, l'errore standard bootstrap viene stimato come
+
+\[
+\widehat{\operatorname{SE}}_{\mathrm{boot}}(\widehat{S})
+=
+\sqrt{
+\frac{1}{B-1}
+\sum_{b=1}^{B}
+\left(
+\widehat{S}^{*(b)}
+-
+\overline{S}^{*}
+\right)^2
+},
+\]
+
+dove
+
+\[
+\overline{S}^{*}
+=
+\frac{1}{B}
+\sum_{b=1}^{B}\widehat{S}^{*(b)}.
+\]
+
+Inoltre, utilizzando i quantili della distribuzione bootstrap, è possibile
+costruire un intervallo di confidenza approssimato.
+
+% Ad esempio, l'intervallo percentile al $95\%$ è dato da
+
+% \[
+% IC_{95\%}(\widehat{S})
+% =
+% \left[
+% Q_{0.025}(\widehat{S}^{*}),
+% Q_{0.975}(\widehat{S}^{*})
+% \right].
+% \]
+
+% Gli estremi corrispondono rispettivamente al percentile $2.5\%$ e al
+% percentile $97.5\%$ delle statistiche calcolate sui campioni bootstrap.
+
+% L'interpretazione frequentista di un intervallo di confidenza riguarda
+% la procedura di costruzione: ripetendo il campionamento e il calcolo
+% dell'intervallo, una procedura ben calibrata al $95\%$ dovrebbe contenere
+% il parametro reale circa nel $95\%$ dei casi.
+
+\paragraph{Quantili, percentili e intervalli di confidenza}
+
+Una volta costruiti numerosi campioni bootstrap, possiamo utilizzare
+le statistiche calcolate su tali campioni per stimare l'incertezza
+associata alla statistica ottenuta dai dati reali.
+
+Prima di descrivere questa procedura, è necessario distinguere
+alcuni concetti fondamentali della statistica inferenziale.
+
+\medskip
+
+\noindent
+\textbf{Definizione di quantile e percentile.}
+
+Consideriamo una variabile aleatoria reale $Y$,
+caratterizzata dalla funzione di distribuzione cumulativa
+
+\[
+F_Y(y)=\Pr(Y\leq y).
+\]
+
+Il \textit{quantile di ordine} $p$, con $0<p<1$,
+è definito come
+
+\[
+\boxed{
+Q_p(Y)=\inf\{y\in\mathbb{R}:F_Y(y)\geq p\}.
+}
+\]
+
+In termini intuitivi, il quantile $Q_p$ rappresenta
+una soglia al di sotto della quale si trova
+una frazione almeno pari a $p$ della distribuzione.
+
+Ad esempio:
+
+\begin{itemize}
+    \item $Q_{0.50}$ è il quantile di ordine $0.50$,
+    comunemente chiamato \textit{mediana};
+
+    \item $Q_{0.025}$ è il quantile di ordine $0.025$,
+    corrispondente al percentile $2.5\%$;
+
+    \item $Q_{0.975}$ è il quantile di ordine $0.975$,
+    corrispondente al percentile $97.5\%$.
+\end{itemize}
+
+Il termine \textit{percentile} esprime quindi lo stesso
+concetto utilizzando una scala percentuale anziché
+un numero compreso tra zero e uno.
+
+Per esempio, il percentile $97.5\%$ indica
+una soglia al di sotto della quale si trova
+approssimativamente il $97.5\%$ delle osservazioni.
+
+\medskip
+
+\noindent
+\textbf{Costruzione dei quantili bootstrap.}
+
+Supponiamo di avere generato $B$ campioni bootstrap
+e di avere calcolato su ciascuno di essi la statistica
+di interesse:
+
+\[
+\widehat{S}^{*(1)},
+\widehat{S}^{*(2)},
+\ldots,
+\widehat{S}^{*(B)}.
+\]
+
+Il simbolo $*$ indica che la statistica è stata
+ottenuta da un campione bootstrap, anziché
+direttamente dal campione originale.
+
+Possiamo ordinare i valori ottenuti in ordine crescente:
+
+\[
+\widehat{S}_{(1)}^*
+\leq
+\widehat{S}_{(2)}^*
+\leq
+\cdots
+\leq
+\widehat{S}_{(B)}^*.
+\]
+
+I quantili empirici vengono ricavati dalla posizione
+occupata dai valori nella sequenza ordinata.
+
+Per esempio, se consideriamo
+
+\[
+B=1000,
+\]
+
+il percentile $2.5\%$ si trova approssimativamente
+in corrispondenza della venticinquesima osservazione
+ordinata, mentre il percentile $97.5\%$ si trova
+approssimativamente in corrispondenza della
+novecentosettantacinquesima.
+
+La posizione esatta può dipendere dalla convenzione
+di interpolazione utilizzata per calcolare
+i quantili empirici.
+
+In questo modo otteniamo due valori:
+
+\[
+Q_{0.025}(\widehat{S}^*),
+\qquad
+Q_{0.975}(\widehat{S}^*).
+\]
+
+Tra questi due estremi si trova approssimativamente
+il $95\%$ centrale della distribuzione bootstrap,
+poiché vengono esclusi il $2.5\%$ inferiore
+e il $2.5\%$ superiore dei valori.
+
+\medskip
+
+\noindent
+\textbf{Costruzione dell'intervallo di confidenza percentile.}
+
+Un \textit{intervallo di confidenza} è un intervallo
+calcolato a partire dai dati osservati, mediante
+una procedura statistica progettata per contenere
+il parametro teorico sconosciuto con una determinata
+frequenza di copertura.
+
+Nel metodo bootstrap percentile, un intervallo
+di confidenza bilaterale con livello nominale
+$1-\alpha$ viene costruito come
+
+\[
+IC_{1-\alpha}(\widehat{S})
+=
+\left[
+Q_{\alpha/2}(\widehat{S}^*),
+Q_{1-\alpha/2}(\widehat{S}^*)
+\right].
+\]
+
+Il parametro $\alpha$ rappresenta la probabilità
+nominale complessiva lasciata nelle due code
+della distribuzione.
+
+Per un intervallo al $95\%$ scegliamo
+
+\[
+1-\alpha=0.95,
+\]
+
+da cui
+
+\[
+\alpha=0.05.
+\]
+
+Poiché consideriamo un intervallo bilaterale,
+suddividiamo questa probabilità equamente
+tra le due code:
+
+\[
+\frac{\alpha}{2}=0.025.
+\]
+
+Otteniamo quindi
+
+\[
+\boxed{
+IC_{95\%}(\widehat{S})
+=
+\left[
+Q_{0.025}(\widehat{S}^*),
+Q_{0.975}(\widehat{S}^*)
+\right].
+}
+\]
+
+Questa procedura prende il nome di
+\textit{metodo percentile} perché utilizza
+direttamente i percentili della distribuzione
+delle stime bootstrap per determinare
+gli estremi dell'intervallo.
+
+\medskip
+
+\noindent
+\textbf{Esempio numerico.}
+
+Supponiamo di voler stimare la correlazione
+tra i log-volumi e i rendimenti assoluti:
+
+\[
+S=
+\operatorname{Corr}(v_t,|r_t|).
+\]
+
+Dai dati reali otteniamo una stima campionaria
+
+\[
+\widehat{S}=0.40.
+\]
+
+Generiamo successivamente $1000$ campioni bootstrap
+e calcoliamo la stessa correlazione su ciascuno
+di essi.
+
+Supponiamo che i quantili della distribuzione
+bootstrap risultino
+
+\[
+Q_{0.025}(\widehat{S}^*)=0.28,
+\]
+
+\[
+Q_{0.975}(\widehat{S}^*)=0.52.
+\]
+
+L'intervallo percentile al $95\%$ sarà
+
+\[
+\boxed{
+IC_{95\%}=[0.28,0.52].
+}
+\]
+
+Il valore $0.40$ costituisce la stima puntuale
+del parametro, mentre l'intervallo $[0.28,0.52]$
+fornisce una rappresentazione dell'incertezza
+campionaria associata a tale stima.
+
+Un intervallo relativamente stretto indica
+una maggiore precisione della stima,
+mentre un intervallo ampio segnala
+una maggiore incertezza.
+
+Questa interpretazione presuppone tuttavia
+che la procedura bootstrap sia appropriata
+per la struttura statistica dei dati analizzati.
+
+\medskip
+
+\noindent
+\textbf{Interpretazione frequentista dell'intervallo
+di confidenza.}
+
+È importante chiarire il significato
+dell'espressione ``intervallo di confidenza al $95\%$''.
+
+Nell'impostazione frequentista, il parametro
+teorico $S$ viene considerato una quantità
+fissa, sebbene sconosciuta.
+
+L'intervallo di confidenza, invece, è casuale
+prima di osservare il campione, perché i suoi
+estremi dipendono dai dati utilizzati
+per costruirlo.
+
+Supponiamo idealmente di poter ripetere
+il seguente esperimento molte volte:
+
+\begin{enumerate}
+    \item estraiamo un nuovo campione di dati
+    dal medesimo processo stocastico;
+
+    \item calcoliamo la statistica campionaria
+    $\widehat{S}$;
+
+    \item applichiamo la procedura bootstrap;
+
+    \item costruiamo un intervallo di confidenza
+    al $95\%$.
+\end{enumerate}
+
+Ogni ripetizione produrrà generalmente
+un intervallo diverso, poiché cambieranno
+i dati osservati.
+
+Indichiamo con
+
+\[
+L(X),\qquad U(X)
+\]
+
+gli estremi inferiore e superiore
+dell'intervallo costruito a partire
+dal campione casuale $X$.
+
+Una procedura con copertura effettiva pari al $95\%$ soddisfa
+
+\[
+\boxed{
+\Pr\left(L(X)\leq S\leq U(X)\right)=0.95.
+}
+\]
+
+La probabilità è riferita alla ripetizione del campionamento e alla conseguente variabilità degli intervalli costruiti.
+In altre parole, se ripetessimo idealmente l'intera procedura un numero molto elevato di volte, circa il $95\%$ degli intervalli ottenuti 
+conterrebbe il vero parametro $S$. Non significa invece che, dopo avere osservato i dati e costruito uno specifico intervallo, il parametro 
+fisso abbia una probabilità del $95\%$ di trovarsi al suo interno. Una volta osservato il campione, l'intervallo è determinato e il parametro 
+teorico o appartiene all'intervallo oppure non vi appartiene. La probabilità del $95\%$ caratterizza quindi la procedura inferenziale, 
+non il parametro sconosciuto.
+\medskip
+
+\noindent
+\textbf{Limiti e validità dell'intervallo bootstrap.}
+Occorre infine precisare che il livello di confidenza nominale non coincide necessariamente con la copertura effettiva.
+Il metodo percentile fornisce un intervallo approssimato, la cui accuratezza dipende da diversi fattori, tra cui:
+
+\begin{itemize}
+    \item il numero di osservazioni disponibili;
+
+    \item la regolarità della distribuzione
+    campionaria dello stimatore;
+
+    \item l'eventuale presenza di distorsione
+    sistematica dello stimatore;
+
+    \item la dipendenza temporale tra
+    le osservazioni;
+
+    \item l'adeguatezza del metodo
+    di ricampionamento utilizzato.
+\end{itemize}
+
+Per le serie finanziarie, nelle quali possono essere presenti autocorrelazioni e volatility clustering, utilizzeremo un metodo di ricampionamento a 
+blocchi, come il moving block bootstrap, anziché il bootstrap ordinario. Inoltre, se lo stimatore presenta una distribuzione particolarmente 
+asimmetrica o una distorsione significativa, il metodo percentile potrebbe non fornire la copertura desiderata. In tali situazioni possono essere 
+necessarie procedure di costruzione degli intervalli più accurate. Nel nostro progetto, gli intervalli bootstrap saranno quindi utilizzati come stime 
+dell'incertezza delle statistiche macroscopiche osservate nel mercato reale, verificandone la stabilità rispetto alle scelte di ricampionamento.
+
+\subsubsection{Moving block bootstrap}
+Il bootstrap ordinario, descritto precedentemente, è generalmente appropriato quando le osservazioni possono essere considerate indipendenti e identicamente distribuite.
+Nel nostro caso, tuttavia, stiamo analizzando una serie temporale finanziaria che può presentare dipendenze tra osservazioni successive, come quelle 
+dovute al volatility clustering. Ricampionare singolarmente i rendimenti distruggerebbe la loro organizzazione temporale e, di conseguenza, parte 
+dell'informazione sulla persistenza delle fluttuazioni. Per affrontare questo problema possiamo utilizzare il \textit{moving block bootstrap}.
+La differenza fondamentale rispetto al bootstrap ordinario è che, invece di estrarre singole osservazioni, vengono estratti blocchi consecutivi di dati.
+
+Consideriamo la serie temporale
+
+\[
+X=(x_1,x_2,\ldots,x_T)
+\]
+
+e fissiamo una lunghezza di blocco $\ell$. Costruiamo tutti i possibili blocchi consecutivi sovrapposti di lunghezza
+$\ell$:
+
+\[
+B_1=(x_1,\ldots,x_{\ell}),
+\]
+
+\[
+B_2=(x_2,\ldots,x_{\ell+1}),
+\]
+
+\[
+\vdots
+\]
+
+\[
+B_{T-\ell+1}
+=
+(x_{T-\ell+1},\ldots,x_T).
+\]
+
+Il termine \textit{moving} si riferisce proprio al fatto che la finestra utilizzata per costruire i blocchi viene spostata progressivamente lungo la 
+serie temporale.
+Successivamente, alcuni di questi blocchi vengono estratti casualmente con reinserimento e concatenati fino a ottenere una nuova serie di lunghezza 
+almeno pari a $T$. Gli eventuali elementi eccedenti vengono eliminati.
+In questo modo si costruisce un nuovo campione bootstrap:
+
+\[
+X^{*(b)}
+=
+B_{j_1}\Vert B_{j_2}\Vert\cdots\Vert B_{j_m},
+\]
+
+opportunamente troncato alla lunghezza $T$, dove il simbolo $\Vert$ indica la concatenazione dei blocchi.
+Il vantaggio è che l'ordine delle osservazioni all'interno di ciascun blocco viene conservato. Pertanto, una parte della struttura di correlazione 
+temporale presente nei dati originali viene mantenuta.
+Ad esempio, se un blocco contiene diversi giorni consecutivi di forte volatilità, questi giorni rimangono consecutivi anche nella replica bootstrap.
+È importante sottolineare che le correlazioni tra blocchi differenti non vengono necessariamente preservate. La qualità dell'approssimazione dipende 
+quindi anche dalla scelta della lunghezza $\ell$.
+Blocchi troppo corti rischiano di distruggere le dipendenze temporali rilevanti, mentre blocchi troppo lunghi riducono il numero di configurazioni 
+distinte che è possibile ottenere dal campione originale.
+La scelta di $\ell$ rappresenta quindi un ulteriore problema statistico, da affrontare mediante criteri appropriati e analisi di sensibilità.
+
+\subsubsection{Applicazione alle statistiche del mercato Bitcoin}
+
+Nel nostro caso disponiamo di due serie temporali osservate:
+
+\[
+r_t = \text{log-rendimento del prezzo},
+\]
+
+\[
+v_t = \text{log-volume degli scambi}.
+\]
+
+Poiché desideriamo stimare anche statistiche che coinvolgono simultaneamente prezzo e volume, come
+
+\[
+\operatorname{Corr}(v_t,|r_t|),
+\]
+
+è importante preservare la corrispondenza temporale tra le due grandezze.
+Per questo motivo, il ricampionamento non viene effettuato separatamente sulle due serie, ma sulla serie vettoriale:
+
+\[
+\mathbf{X}_t =
+\begin{pmatrix}
+r_t\\
+v_t
+\end{pmatrix}.
+\]
+
+Ogni blocco bootstrap contiene quindi coppie consecutive di rendimento e volume. Questo permette di conservare, almeno all'interno dei blocchi, sia 
+le dipendenze temporali sia le relazioni contemporanee tra le due variabili.
+
+Per ogni replica bootstrap calcoliamo nuovamente l'intero vettore delle statistiche macroscopiche:
+
+\[
+\widehat{\mathbf{S}}^{*(b)}
+=
+\begin{pmatrix}
+\widehat{S}_1^{*(b)}\\
+\widehat{S}_2^{*(b)}\\
+\vdots\\
+\widehat{S}_8^{*(b)}
+\end{pmatrix}.
+\]
+
+L'insieme delle repliche permette di stimare gli errori standard delle singole statistiche e la loro matrice di covarianza:
+
+\[
+\widehat{\Sigma}_{\mathrm{real}}
+=
+\frac{1}{B-1}
+\sum_{b=1}^{B}
+\left(
+\widehat{\mathbf{S}}^{*(b)}
+-
+\overline{\mathbf{S}}^{*}
+\right)
+\left(
+\widehat{\mathbf{S}}^{*(b)}
+-
+\overline{\mathbf{S}}^{*}
+\right)^T,
+\]
+
+dove
+
+\[
+\overline{\mathbf{S}}^{*}
+=
+\frac{1}{B}
+\sum_{b=1}^{B}\widehat{\mathbf{S}}^{*(b)}.
+\]
+
+Questa matrice contiene sia le incertezze associate alle singole statistiche sia le correlazioni tra i rispettivi errori di stima.
+
+Tali informazioni saranno utili durante la calibrazione del modello, perché permetteranno di attribuire un peso differente agli scostamenti tra 
+statistiche reali e simulate. In una prima implementazione possiamo utilizzare $B=1000$ repliche bootstrap, verificando successivamente la stabilità 
+dei risultati rispetto al numero di repliche e alla lunghezza dei blocchi.
+
+L'applicabilità del moving block bootstrap richiede comunque ipotesi sulla struttura di dipendenza e sulla regolarità del processo, tipicamente una 
+forma di stazionarietà debole con dipendenze sufficientemente decrescenti. In presenza di cambiamenti strutturali o regimi di mercatomolto differenti, 
+sarà necessario valutare se analizzare separatamente i diversi intervalli temporali.
+
+Al termine di questa procedura, per ciascuna statistica macroscopica disporremo quindi di una stima empirica, di un errore standard e di
+un intervallo di confidenza, che costituiranno il riferimento quantitativo per la successiva calibrazione del modello agent-based.
+
+\subsubsection{Stima delle statistiche del modello tramite Monte Carlo}
+Per ogni scelta di \(\boldsymbol\theta\), eseguiamo \(M\) simulazioni indipendenti:
+\[
+\mathbf S^{(1)}(\boldsymbol\theta),
+\ldots,
+\mathbf S^{(M)}(\boldsymbol\theta).
+\]
+Ogni simulazione produce una serie di prezzi e volumi, dalla quale calcoliamo le medesime otto statistiche empiriche.
+Stimiamo il vettore medio:
+\[
+\overline{\mathbf S}(\boldsymbol\theta)
+=
+\frac{1}{M}
+\sum_{j=1}^{M}\mathbf S^{(j)}(\boldsymbol\theta)
+\]
+e la matrice di covarianza delle statistiche simulate:
+\[
+\widehat\Sigma_{\mathrm{sim}}(\boldsymbol\theta)
+=
+\frac{1}{M-1}
+\sum_{j=1}^{M}
+\left(\mathbf S^{(j)}-\overline{\mathbf S}\right)
+\left(\mathbf S^{(j)}-\overline{\mathbf S}\right)^T.
+\]
+Questa seconda grandezza è essenziale perchè non vogliamo soltanto un modello che produca statistiche corrette in media: vogliamo anche capire quanto i 
+risultati varino tra una simulazione e l'altra. È utile distinguere tra la dispersione delle statistiche delle singole simulazioni, descritta da 
+\(\widehat\Sigma_{\mathrm{sim}}\), e l'incertezza Monte Carlo sulla loro media, che è invece proporzionale a \(\widehat\Sigma_{\mathrm{sim}}/M\).
+Possiamo ora definire una funzione obiettivo:
+\[
+\mathcal L(\boldsymbol\theta)=
+\left(
+\overline{\mathbf S}(\boldsymbol\theta)
+-\widehat{\mathbf S}_{\mathrm{real}}
+\right)^T
+W
+\left(
+\overline{\mathbf S}(\boldsymbol\theta)
+-\widehat{\mathbf S}_{\mathrm{real}}
+\right).
+\]
+
+La scelta dei pesi \(W\) è importante perché le diverse statistiche hanno scale e precisioni diverse.
+Per una prima implementazione possiamo utilizzare una matrice diagonale:
+\[
+W_{ii}=
+\frac{1}{
+\operatorname{SE}(\widehat S_i^{\mathrm{real}})^2+\epsilon_i
+},
+\]
+
+con regolarizzatori \(\epsilon_i>0\) scelti per evitare pesi eccessivi o numericamente instabili.
+L'obiettivo diventa:
+\[
+\boxed{
+\boldsymbol\theta^*
+=
+\arg\min_{\boldsymbol\theta}
+\mathcal L(\boldsymbol\theta)
+}
+\]
+
+Il modello è calibrato quando troviamo parametri che rendono sufficientemente vicine le statistiche simulate e quelle empiriche.
+Attenzione però non significa ancora che il modello sia validato. Abbiamo soltanto trovato una configurazione che riproduce bene il campione 
+utilizzato durante la calibrazione.
+
+\subsection{Test statistici}
+\begin{itemize}
+    % \item Test diagnostici sulle serie
+    % \begin{table}[h]
+    % \centering
+    % \small
+    % \renewcommand{\arraystretch}{1.35}
+    % \begin{tabularx}{\textwidth}{X X X}
+    %     \toprule
+    %     \textbf{Test} 
+    %     & \textbf{Ipotesi nulla} 
+    %     & \textbf{Utilità} \\
+    %     \midrule
+        
+    %     Ljung--Box sui rendimenti
+    %     & Assenza di autocorrelazione fino a un ritardo prefissato
+    %     & Verificare la dipendenza lineare dei rendimenti \\
+        
+    %     Ljung--Box sui rendimenti assoluti
+    %     & Assenza di autocorrelazione nei valori assoluti
+    %     & Studiare il clustering della volatilità \\
+        
+    %     ARCH--LM
+    %     & Assenza di effetti ARCH nei rendimenti depurati dall'eventuale dinamica media
+    %     & Individuare eteroschedasticità condizionale \\
+        
+    %     \bottomrule
+    % \end{tabularx}
+    % \caption{Test statistici utilizzati per l'analisi dei rendimenti.}
+    % \label{tab:test-statistici-rendimenti}
+    % \end{table}
+    % test Ljung–Box e ARCH–LM sono strumenti standard per l'analisi delle dipendenze temporali e della volatilità condizionale. Questi test andrebbero 
+    % applicati sia ai dati reali sia alle serie generate dal modello. Tuttavia, occorre una precisazione: ottenere lo stesso risultato di significatività 
+    % statistica non significa riprodurre correttamente una proprietà. Per esempio, due serie potrebbero entrambe mostrare un Ljung–Box significativo 
+    % pur avendo autocorrelazioni molto diverse. Per questo motivo confronteremo anche le autocorrelazioni stimate, i loro intervalli di confidenza e 
+    % la loro evoluzione al variare del ritardo.
+    \item \textbf{Test diagnostici sulle serie}
+
+    Per verificare se le serie temporali generate dal modello agent-based riproducono alcune delle proprietà statistiche osservate nel mercato reale,
+    possiamo utilizzare diversi test di ipotesi.
+    Un test statistico è una procedura che permette di valutare la compatibilità dei dati osservati con una determinata ipotesi, detta \textit{ipotesi nulla}
+    ($H_0$), confrontandola con un'ipotesi alternativa ($H_1$).
+    Il risultato del test viene generalmente espresso attraverso un \textit{p-value}, che rappresenta, assumendo vera l'ipotesi nulla,
+    la probabilità di ottenere una statistica test almeno altrettanto estrema di quella osservata, nella direzione specificata dal test.
+
+    Fissato un livello di significatività $\alpha$, comunemente pari a $0.05$, si rifiuta $H_0$ quando
+    \[
+    p\text{-value}<\alpha.
+    \]
+    Se invece il p-value è maggiore o uguale ad $\alpha$, non si dispone di evidenza statistica sufficiente per rifiutare $H_0$.
+    Questo non equivale a dimostrare che l'ipotesi nulla sia vera.
+    Nel nostro caso utilizzeremo principalmente i seguenti test:
+    \begin{table}[htbp]
+        \centering
+        \small
+        \renewcommand{\arraystretch}{1.4}
+        \begin{tabularx}{\textwidth}{X X X}
+            \toprule
+            \textbf{Test}
+            & \textbf{Ipotesi nulla}
+            & \textbf{Utilità} \\
+            \midrule
+            Ljung--Box sui rendimenti
+            & Assenza di autocorrelazione lineare fino a un ritardo prefissato
+            & Verificare la dipendenza temporale lineare dei rendimenti \\
+            Ljung--Box sui rendimenti assoluti
+            & Assenza di autocorrelazione nei rendimenti assoluti fino a un ritardo prefissato
+            & Individuare la persistenza temporale dell'ampiezza delle fluttuazioni \\
+            ARCH--LM
+            & Assenza di effetti ARCH fino all'ordine considerato
+            & Individuare una dipendenza della varianza condizionale dai rendimenti quadratici passati \\
+            \bottomrule
+        \end{tabularx}
+        \caption{Test statistici utilizzati per l'analisi delle serie dei rendimenti.}
+        \label{tab:test-statistici-rendimenti}
+    \end{table}
+
+    \item Test di compatibilità sulle singole statistiche\\
+    Una volta calibrato il modello, generiamo un nuovo insieme indipendente di simulazioni.
+    Per ogni statistica \(S_i\), costruiamo l'intervallo predittivo Monte Carlo:
+    \[
+    I_i^{95\%}(\boldsymbol\theta^*)=
+    \left[
+    Q_{0.025}(S_i^{\mathrm{sim}}),
+    Q_{0.975}(S_i^{\mathrm{sim}})
+    \right].
+    \]
+    Se la statistica reale cade all'interno di questo intervallo, il risultato è compatibile con la variabilità prevista dal modello per quella 
+    statistica, al livello considerato. Per esempio, se la correlazione volume-volatilità osservata fosse \(0.42\), mentre il modello producesse 
+    nelle varie simulazioni valori compresi prevalentemente tra \(0.10\) e \(0.25\), avremmo un'evidenza di disaccordo, anche se altre statistiche fossero riprodotte correttamente.
+    Bisogna però considerare che effettuando otto confronti separati aumenta la probabilità di osservare almeno un risultato estremo per puro caso. 
+    Gli intervalli individuali non sostituiscono quindi una verifica congiunta.
+    \item Test globale di compatibilità\\
+    Sia \(\widehat{\mathbf S}_{\mathrm{test}}\) il vettore delle statistiche ottenuto da dati reali non utilizzati durante la calibrazione.
+    Costruiamo una distanza:
+    \[
+    D_{\mathrm{obs}}=
+    \left(
+    \widehat{\mathbf S}_{\mathrm{test}}
+    -\overline{\mathbf S}_{\mathrm{sim}}
+    \right)^T
+    W_{\mathrm{test}}
+    \left(
+    \widehat{\mathbf S}_{\mathrm{test}}
+    -\overline{\mathbf S}_{\mathrm{sim}}
+    \right),
+    \]
+    dove \(W_{\mathrm{test}}\) è fissata prima di osservare i risultati del test, per esempio utilizzando una matrice di covarianza regolarizzata delle statistiche simulate.
+    Calcoliamo poi una distanza analoga per ciascuna simulazione indipendente, rispetto a un riferimento simulato stimato separatamente:
+    \[
+    D_j=
+    \left(
+    \mathbf S^{(j)}_{\mathrm{sim}}
+    -\overline{\mathbf S}_{\mathrm{ref}}
+    \right)^T
+    W_{\mathrm{test}}
+    \left(
+    \mathbf S^{(j)}_{\mathrm{sim}}
+    -\overline{\mathbf S}_{\mathrm{ref}}
+    \right).
+    \]
+
+    Possiamo stimare un valore \(p\) Monte Carlo:
+    \[
+    p_{\mathrm{MC}}=
+    \frac{
+    1+\sum_{j=1}^{M}\mathbb{1}(D_j\geq D_{\mathrm{obs}})
+    }{
+    M+1
+    }.
+    \]
+
+    Questa costruzione verifica se lo scostamento della serie reale dalle statistiche tipiche del modello sia anomalo rispetto agli scostamenti osservati nelle simulazioni.
+    Le simulazioni del test devono avere la stessa lunghezza temporale della serie reale di verifica. Inoltre, il modello e i pesi devono essere già fissati: usare per la verifica finale i dati sui quali abbiamo ottimizzato i parametri renderebbe il test eccessivamente favorevole.
+    Un valore \(p_{\mathrm{MC}}\) piccolo suggerisce che il modello non sia compatibile con l'insieme delle statistiche selezionate. Un valore non piccolo indica che non abbiamo evidenza sufficiente per respingerlo, non che abbiamo dimostrato che il modello sia vero.
+\end{itemize}
+
+\subsection{Modifiche necessarie al modello NetLogo}
+Prima di eseguire tutte queste simulazioni, però, dobbiamo affrontare alcune criticità strutturali.
+La più importante è la coerenza tra prezzo, volume e operazioni realmente eseguite.
+Attualmente gli acquisti e le vendite aggiornano i portafogli individuali senza un esplicito meccanismo di abbinamento tra ordini. Questo significa 
+che le quantità totali di Bitcoin e liquidità detenute dagli agenti possono cambiare anche in assenza di trasferimenti con una controparte identificata.
+Per un modello completamente endogeno dovremmo introdurre un meccanismo di scambio coerente, scegliendo tra un sistema di matching degli ordini e un 
+market maker esplicito. Inoltre, occorre distinguere tra volume scambiato e pressione direzionale. In ogni scambio eseguito esistono sia un compratore 
+sia un venditore: per definire uno sbilanciamento utile alla formazione del prezzo dobbiamo considerare, per esempio, il flusso di ordini aggressivi 
+con segno, oppure la domanda e l'offerta immesse prima del matching. Rivedrei anche il ciclo temporale: le decisioni e gli ordini degli agenti 
+dovrebbero contribuire alla formazione del prezzo successivo, anziché aggiornare il prezzo prima delle operazioni dello stesso passo temporale.
+Infine, per una versione completamente endogena, elimineremo il meccanismo che copia il prezzo reale durante la Fase 1. I dati reali serviranno 
+alla calibrazione e alla validazione, non come forzante durante la generazione autonoma delle traiettorie. Dovremo anche verificare i fattori 
+correttivi aggregati, come quello basato sull'ATH, per evitare che mascherino un comportamento che gli agenti non generano realmente.
+
+\subsection{Protocollo da seguire}
+
+\begin{table}[h]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.35}
+    \begin{tabularx}{\textwidth}{X X}
+        \toprule
+        \textbf{Aspetto} 
+        & \textbf{Scelta iniziale} \\
+        \midrule
+        
+        Frequenza
+        & Giornaliera \\
+        
+        Statistiche-obiettivo
+        & $8$ \\
+        
+        Parametri da calibrare
+        & Circa $5$--$6$ \\
+        
+        Simulazioni per esplorazione iniziale
+        & $30$--$50$ per configurazione \\
+        
+        Simulazioni per raffinamento
+        & $100$--$200$ per configurazione \\
+        
+        Simulazioni finali di validazione
+        & Almeno $500$, se il costo computazionale lo permette \\
+        
+        Stima incertezza empirica
+        & \emph{Stationary/block bootstrap} \\
+        
+        Test principale
+        & Compatibilità Monte Carlo congiunta \\
+        
+        Test diagnostici
+        & Ljung--Box, ARCH--LM, autocorrelazioni e distribuzioni empiriche \\
+        
+        \bottomrule
+    \end{tabularx}
+    \caption{Scelte iniziali per la procedura di calibrazione e validazione.}
+    \label{tab:scelte-iniziali-calibrazione}
+\end{table}
+
+Riprodurre le statistiche finanziarie e dimostrare che il flocking ne è responsabile sono due risultati diversi.
+Se il modello completo riproduce le otto statistiche, abbiamo evidenza della sua adeguatezza rispetto a quell'insieme di proprietà empiriche.
+Se però otteniamo gli stessi risultati anche disattivando il flocking, allora il flocking non è necessario per spiegarle, almeno nell'ambito delle 
+configurazioni studiate.
+Viceversa, se l'introduzione del flocking migliora sistematicamente la riproduzione del clustering della volatilità, della persistenza dei volumi o 
+delle correlazioni prezzo-volume, avremo individuato un possibile meccanismo microscopico responsabile di proprietà macroscopiche.
+Questa, secondo me, è la domanda scientifica più interessante da porre nel vostro articolo:
+Quali meccanismi collettivi sono necessari, all'interno di un mercato artificiale minimale, per generare le proprietà statistiche osservate in un mercato reale come Bitcoin?

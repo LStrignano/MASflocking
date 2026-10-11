@@ -22,8 +22,34 @@
 \usepackage{slashed}   % Notazione slash di Dirac: \slashed{p}
 \usepackage{tensor}    % Per indici tensori: \tensor{T}{^\mu_\nu}
 
-\numberwithin{equation}{section} % Equazioni numerate secondo la sezione
+% ---------- BOX APPROFONDIMENTO ----------
+\usepackage[most]{tcolorbox}
 
+\newtcolorbox{approfondimento}{
+    enhanced,
+    breakable,
+    colback=orange!5,              % colore di sfondo
+    colframe=orange!75!black,      % colore del bordo
+    colbacktitle=orange!75!black,  % colore della barra del titolo
+    coltitle=white,                % colore del titolo
+    fonttitle=\bfseries\footnotesize\sffamily,
+    boxrule=0.8pt,
+    arc=3pt,
+    left=6pt,
+    right=6pt,
+    top=6pt,
+    bottom=6pt,
+    before skip=10pt,
+    after skip=10pt,
+    title={Approfondimento},       % titolo di default
+    fontupper=\small,              % testo più piccolo all'interno del box
+    attach boxed title to top left={xshift=8pt,yshift=-4pt},
+    boxed title style={
+        sharp corners,
+        boxrule=0pt,
+        enhanced,
+    },
+}
 % ---------- GRAFICA E COLORI ----------
 \usepackage{graphicx}
 \usepackage{xcolor}
@@ -38,6 +64,10 @@
   citecolor  = teal,
   urlcolor   = magenta
 }
+
+% ---------- TABELLE ----------
+\usepackage{booktabs}
+\usepackage{tabularx}
 
 % ---------- FORMATO ARTICOLO SCIENTIFICO ----------
 \usepackage{authblk}
@@ -158,7 +188,8 @@
 
 % \vspace{0.5cm}
 
-\input{spiegazione_codice_teoria.tex}
+% \input{spiegazione_codice_teoria.tex}
+\input{elementi_teoria.tex}
 
 % \begin{multicols}{2}
 % \input{articolo.tex}
