@@ -178,8 +178,8 @@ to setup
     set size 10
     posiziona-al-centro
     set heading random 360
-    set velocity-x cos heading
-    set velocity-y sin heading
+    set velocity-x sin heading
+    set velocity-y cos heading
     set flockmates no-turtles
     inizializza-portafoglio
   ]
@@ -189,8 +189,8 @@ to setup
     set size 10
     posiziona-al-centro
     set heading random 360
-    set velocity-x cos heading
-    set velocity-y sin heading
+    set velocity-x sin heading
+    set velocity-y cos heading
     set flockmates no-turtles
     inizializza-portafoglio
   ]
@@ -200,8 +200,8 @@ to setup
     set size 10
     posiziona-al-centro
     set heading random 360
-    set velocity-x cos heading
-    set velocity-y sin heading
+    set velocity-x sin heading
+    set velocity-y cos heading
     set flockmates no-turtles
     inizializza-portafoglio
   ]
@@ -443,7 +443,6 @@ to flock
   ]
 end
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; TRADING (Sezione 1)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -547,15 +546,21 @@ to aggiorna-dati
 
   if real-trading-volume-usd > real-volume-ath [ set real-volume-ath real-trading-volume-usd ]
 
-  ifelse btc-prev-price > 0 [
-    set btc-return (new-price - btc-prev-price) / btc-prev-price
-    set btc-volatility abs btc-return
-  ][
+  ;; Prezzo immediatamente precedente
+  let old-price btc-price
+  
+  ;; Calcolo del rendimento corretto
+  ifelse old-price > 0 [
+    set btc-return (new-price - old-price) / old-price
+  ] [
     set btc-return 0
-    set btc-volatility 0
   ]
-
-  set btc-prev-price btc-price
+  
+  ;; Indicatore dell'ampiezza del rendimento
+  set btc-volatility abs btc-return
+  
+  ;; Aggiornamento dei prezzi
+  set btc-prev-price old-price
   set btc-price new-price
 
   if btc-initial-price = 0 and btc-price > 0 [
@@ -808,7 +813,7 @@ to-report bitcoin-c report sum [bitcoin-held] of agents-c end]]></code>
     <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">500.0</input>
     <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">25.0</input>
     <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">10.0</input>
-    <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">50.0</input>
+    <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">1000.0</input>
     <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="22" multiline="false" y="469" height="60" variable="trade-interval" type="number" width="156" sizeVersion="0">5.0</input>

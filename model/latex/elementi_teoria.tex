@@ -1,3 +1,357 @@
+\section{Cosa stiamo facendo?}
+\subsection{Introduzione}
+Riguardo questo progetto possono essere poste moltissime domande (per essere gentili) riguardo la validità delle scelte modellistiche che sono state 
+fatte. Per parafrasare le parole di Giorgio Parisi, dette durante l'intervista in occasione dell'incontro con gli studenti il giorno in cui gli è stato 
+assegnato la laurea honoris causa in Fisica dei Sistemi Complessi, "esistono due tipi di scienziati che sono in grado di determinare un 
+l'avanzamento di una certa disciplina, attraverso l'introduzione di nuovi punti di vista che si discostano dai modelli già noti, quelli che conoscono 
+tutto della disciplina in questione e quindi si rendono perfettamente conto che è possibile adottare un nuovo punto di vista, e quelli che non conoscono praticamente 
+nulla ma portano avanti lo stesso un nuovo punto di vista senza rendersi conto che è un nuovo punto di vista". Dove ci poniamo noi? Nella nosta 
+posizione attuale possiamo solo sperre di trovarci nel seconodo caso. 
+
+\subsection{Proviamo a rispondere ad alcune domande}
+Possiamo provare a considerare le seguenti domande e proviamo a darne una risposta.
+\begin{itemize}
+    \item Perché il comportamento imitativo degli investitori dovrebbe essere descritto attraverso un modello di flocking?
+    \item Quale meccanismo permette di collegare il comportamento collettivo degli agenti alle fluttuazioni del prezzo e alla volatilità di Bitcoin?
+    \item Il nostro sistema è effettivamente un modello agent-based oppure una dinamica di particelle alla quale abbiamo attribuito un significato finanziario?
+\end{itemize}
+
+\paragraph{Risposta alla prima e alla seconda domanda}
+Un possibile collegamento tra il mercato finanziario e il flocking è il comportamento imitativo degli investitori detto herding.
+Nel modello di Tamás Vicsek, particelle dotate di una direzione di moto tendono ad allinearsi con quelle vicine, pur essendo soggette a rumore. 
+Un comportamento globalmente ordinato può emergere da interazioni locali, senza che esista un coordinatore centrale.
+In un mercato finanziario l'analogia può essere formulata nel seguente modo:
+
+% \begin{table}[h]
+%     \centering
+%     \small
+%     \renewcommand{\arraystretch}{1.35}
+%     \begin{tabularx}{\textwidth}{X c X}
+%     \toprule
+%     \textbf{Modello di flocking} 
+%     & \textbf{Interpretazione finanziaria} 
+%     \midrule
+
+%     Particella
+%     & Investitore o operatore \\
+
+%     Direzione della particella
+%     & Orientamento decisionale\\
+
+%     Allineamento con i vicini
+%     & Imitazione delle decisioni altrui \\
+%     Rumore
+%     & Componente individuale non coordinata delle decisioni\\
+
+%     Rete di vicinato
+%     & Rete di influenza o comunicazione\\
+
+%     Formazione di gruppi allineati
+%     & Emergenza di gruppi con strategie concordi\\
+
+%     Parametro d'ordine
+%     & Misura del coordinamento collettivo\\
+
+%     \bottomrule
+%     \end{tabularx}
+%     \caption{Veloce confronto}
+%     \label{tab:statistiche-rendimenti}
+% \end{table}
+
+L'analogia non è puramente arbitraria. Già nel lavoro di Rama Cont e Jean-Philippe Bouchaud, Herd Behavior and Aggregate Fluctuations in Financial 
+Markets (2000), il comportamento imitativo degli investitori viene collegato matematicamente alla comparsa di fluttuazioni aggregate con code pesanti.
+Anche Lux e Marchesi (1999) hanno mostrato che le interazioni tra investitori eterogenei possono generare dinamiche finanziarie complesse, comprese 
+caratteristiche statistiche che ricordano quelle dei mercati reali.\\
+Per le criptovalute esiste l'herding? Esistono evidenze empiriche, anche se il fenomeno non è uniforme né sempre attribuibile all'imitazione diretta.
+Uno studio di Gemayel e Preda (2024), Herding in the cryptocurrency market: A transaction-level analysis, analizza transazioni di operatori in mercati 
+crypto e rileva comportamento gregario; una parte importante è però associata alla ripetizione delle proprie strategie passate, oltre che alle influenze 
+dell'ambiente di mercato.
+Questo suggerisce una distinzione importante: non basta osservare che molti investitori agiscono nello stesso modo per concludere che si stiano imitando.
+Potrebbero essere tutti influenzati dalla stessa notizia, dalla stessa variazione di prezzo o dallo stesso indicatore tecnico.
+Perciò il nostro modello deve distinguere: Influenza sociale: un agente cambia comportamento perché osserva altri agenti e risposta comune, cioè più a
+genti cambiano comportamento perché ricevono lo stesso segnale esterno.
+Nel codice attuale il flocking rappresenta il primo meccanismo, mentre le correnti dipendenti dal rendimento e dalla volatilità rappresentano il secondo.
+Vediamo collegare matematicamente herding e volatilità. Consideriamo \(N\) agenti e definiamo una variabile decisionale:
+\[
+s_i(t)\in\{-1,0,+1\},
+\]
+
+con il significato:
+\[
+s_i(t)=
+\begin{cases}
++1 & \text{intenzione di acquistare},\\
+0 & \text{nessuna operazione},\\
+-1 & \text{intenzione di vendere}.
+\end{cases}
+\]
+
+Per semplicità, supponiamo inizialmente che tutti gli agenti possano inviare ordini della stessa dimensione \(q\).
+Definiamo la domanda netta intenzionale:
+\[
+D(t)=q\sum_{i=1}^{N}s_i(t).
+\]
+
+Questa grandezza non rappresenta il volume totale effettivamente eseguito: misura lo sbilanciamento tra gli ordini di acquisto e vendita che gli agenti 
+vorrebbero effettuare. Consideriamo ora la sua varianza:
+\[
+\operatorname{Var}[D(t)]
+=
+q^2\operatorname{Var}\left[\sum_{i=1}^{N}s_i(t)\right].
+\]
+
+Sviluppando:
+\[
+\boxed{
+\operatorname{Var}[D(t)]
+=
+q^2\left[
+\sum_{i=1}^{N}\operatorname{Var}[s_i(t)]
++
+2\sum_{i<j}\operatorname{Cov}[s_i(t),s_j(t)]
+\right].
+}
+\]
+
+Questa equazione è fondamentale.
+Se gli agenti decidono indipendentemente, le covarianze tra le loro decisioni sono nulle. Per agenti identicamente distribuiti con varianza finita, 
+otteniamo:
+\[
+\operatorname{Var}[D(t)]\propto N.
+\]
+
+Se invece gli agenti tendono a imitarsi, alcune covarianze diventano positive:
+\[
+\operatorname{Cov}[s_i(t),s_j(t)]>0.
+\]
+
+La varianza della domanda netta aumenta. Nel limite ideale in cui tutti gli agenti adottano la stessa decisione aleatoria, essa può crescere come:
+\[
+\operatorname{Var}[D(t)]\propto N^2.
+\]
+upponiamo ora di introdurre un meccanismo semplificato di impatto sul prezzo:
+\[
+r_t=\lambda D(t)+\varepsilon_t,
+\]
+
+dove \(\lambda\) rappresenta la sensibilità del prezzo allo sbilanciamento degli ordini ed \(\varepsilon_t\) è una perturbazione indipendente da \(D(t)\).
+Se \(\lambda\) è costante:
+\[
+\boxed{
+\operatorname{Var}[r_t]
+=
+\lambda^2\operatorname{Var}[D(t)]
++
+\operatorname{Var}[\varepsilon_t].
+}
+\]
+
+Da questa relazione segue che un aumento della variabilità della domanda netta può produrre un aumento della varianza dei rendimenti, quindi della 
+volatilità. Abbiamo così ottenuto una catena causale all'interno del modello:
+Maggiore imitazione tra agenti $\to$ Maggiore correlazione tra decisioni $\to$ Maggiore variabilità degli sbilanciamenti degli ordini $\to$ Possibile aumento della volatilità dei rendimenti
+Questa derivazione dà una motivazione fisico-matematica concreta all'utilizzo del flocking Naturalmente, dipende dalle ipotesi adottate: il flocking 
+non implica automaticamente un aumento della volatilità. Se tutti gli agenti comprassero sempre nella stessa misura, avremmo una forte pressione 
+direzionale ma non necessariamente rendimenti molto variabili. Per generare fluttuazioni serve che lo sbilanciamento cambi, per esempio attraverso 
+cambiamenti del coordinamento, rumore, limiti di portafoglio o transizioni tra comportamenti. Il passaggio dal flusso degli ordini alla variazione 
+del prezzo trova anche sostegno empirico negli studi di microstruttura finanziaria: Cont, Kukanov e Stoikov hanno osservato una relazione tra 
+variazioni di prezzo e sbilanciamento del flusso degli ordini, con un effetto dipendente dalla profondità del mercato. Il loro risultato riguarda 
+titoli azionari, quindi non può essere trasferito quantitativamente a Bitcoin senza verifiche specifiche.
+Il collegamento appena ricavato riguarda la varianza dei rendimenti. Ma uno dei nostri obiettivi è riprodurre anche il volatility clustering, cioè la tendenza delle fasi turbolente a concentrarsi nel tempo.
+Per ottenere questa proprietà serve un ingrediente ulteriore: la persistenza temporale dello stato collettivo degli agenti.
+Immaginiamo che il mercato alterni periodi nei quali gli investitori agiscono indipendentemente a periodi nei quali si imitano fortemente.
+Se il grado di imitazione evolve lentamente, anche la variabilità degli sbilanciamenti degli ordini può mostrare una certa persistenza.
+Possiamo quindi ipotizzare:
+\[
+\text{Herding persistente}
+\longrightarrow
+\text{Varianza persistente degli ordini}
+\longrightarrow
+\text{Volatilità persistente}.
+\]
+
+È precisamente questo genere di meccanismo che rende interessanti gli ABM finanziari. Non è necessario imporre direttamente una volatilità elevata 
+per un certo numero di giorni: possiamo tentare di farla emergere dall'organizzazione delle interazioni. Nel lavoro di Lux e Marchesi, per esempio, 
+le proprietà statistiche delle fluttuazioni del mercato emergono dalle interazioni e dai cambiamenti nelle popolazioni di operatori.
+Per il nostro progetto la domanda diventa quindi: possiamo ottenere clustering della volatilità facendo evolvere soltanto le interazioni, il 
+comportamento imitativo e le decisioni degli agenti? Questa sarebbe un'ipotesi scientifica verificabile, non una semplice analogia tra flocking 
+e mercati finanziari.\\
+Quanto di tutto questo è già presente nel nostro modello?
+Qui dobbiamo essere piuttosto critici.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.4}
+
+    \begin{tabularx}{\textwidth}{
+        @{}
+        >{\raggedright\arraybackslash}p{0.20\textwidth}
+        >{\raggedright\arraybackslash}X
+        >{\raggedright\arraybackslash}X
+        @{}
+    }
+        \toprule
+        \textbf{Elemento attuale}
+        & \textbf{Criticità}
+        & \textbf{Possibile miglioramento} \\
+        \midrule
+
+        Flocking degli orientamenti (\texttt{heading})
+        & L'allineamento delle direzioni non coincide
+          necessariamente con l'allineamento delle
+          decisioni di trading
+        & Collegare direttamente l'interazione sociale
+          alle intenzioni di acquisto e vendita \\
+        \midrule
+
+        Coordinata $y$
+        & Determina buy/sell, ma è una rappresentazione
+          astratta dell'opinione
+        & Definirla esplicitamente come sentiment
+          individuale \\
+        \midrule
+
+        Coordinata $x$
+        & La probabilità di trading cresce verso destra,
+          ma non è chiaro perché debba seguire una
+          dinamica spaziale
+        & Interpretarla come propensione operativa
+          e definire come evolve \\
+        \midrule
+
+        Corrente legata ai rendimenti
+        & Rappresenta una risposta comune al mercato,
+          non necessariamente un fenomeno imitativo
+        & Separare segnali pubblici e influenza sociale \\
+        \midrule
+
+        Prezzo endogeno
+        & Dipende dalla media delle coordinate $y$,
+          non dagli ordini effettivamente presentati
+        & Introdurre domanda netta e price impact \\
+        \midrule
+
+        Volume del modello
+        & Somma acquisti e vendite senza un meccanismo
+          esplicito di esecuzione
+        & Definire un mercato con matching oppure
+          market maker \\
+
+        \bottomrule
+    \end{tabularx}
+
+    \caption{Criticità del modello attuale e possibili miglioramenti.}
+    \label{tab:criticita-modello}
+\end{table}
+
+Una criticità particolarmente importante: il parametro d'ordine
+Attualmente calcolate:
+\[
+\Phi(t)=\frac{1}{N}
+\left|\sum_{i=1}^{N}\mathbf u_i(t)\right|,
+\]
+
+dove \(\mathbf u_i\) è il vettore unitario associato all'orientamento dell'agente.
+Questa grandezza misura quanto le direzioni degli agenti siano allineate, ma non misura necessariamente quanto siano concordi le loro decisioni finanziarie.
+Per esempio, due agenti possono avere la stessa direzione di moto e trovarsi uno nella regione buy e l'altro nella regione sell.
+Inoltre, un valore \(\Phi\simeq 1\) indica forte allineamento, ma non dice se il mercato sia orientato all'acquisto oppure alla vendita.
+Per questo introdurrei due osservabili diverse:
+\[
+\Phi(t)=\text{grado di allineamento geometrico},
+\]
+
+\[
+m(t)=\frac{1}{N}\sum_{i=1}^{N}s_i(t)
+=\text{sbilanciamento medio delle intenzioni}.
+\]
+
+Il primo misura il flocking nel senso geometrico. Il secondo misura l'orientamento collettivo finanziario.
+Sarebbe interessante verificare se esista una relazione tra \(\Phi(t)\) e \(m(t)\), anziché assumere che le due grandezze siano equivalenti.
+Un problema tecnico da correggere in seguito
+Nel codice c'è anche un'incoerenza tra l'orientamento NetLogo e le componenti della velocità.
+In NetLogo, infatti:
+\[
+dx=\sin(\texttt{heading}),\qquad
+dy=\cos(\texttt{heading}),
+\]
+
+poiché la direzione \(0^\circ\) corrisponde al Nord, non all'asse \(x\) positivo come nella convenzione matematica usuale.
+
+\paragraph{Risposta alla terza domanda}
+ì, in senso metodologico lo è. Ma bisogna distinguere l'appartenenza alla famiglia degli ABM dall'adeguatezza del modello come descrizione economica.
+Un modello agent-based descrive un sistema attraverso entità individuali dotate di stati e regole di comportamento. Gli agenti possono essere 
+eterogenei, interagire tra loro e con un ambiente comune e produrre dinamiche aggregate non specificate direttamente a livello globale. Questa 
+impostazione è ampiamente utilizzata anche nei modelli finanziari. Nel nostro caso troviamo effettivamente tutti gli elementi fondamentali:
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.35}
+
+    \begin{tabularx}{\textwidth}{
+        @{}
+        >{\raggedright\arraybackslash}p{0.32\textwidth}
+        >{\raggedright\arraybackslash}X
+        @{}
+    }
+        \toprule
+        \textbf{Caratteristica ABM}
+        & \textbf{Presenza nel modello} \\
+        \midrule
+
+        Agenti individuali
+        & Le turtles rappresentano singoli operatori \\
+        \midrule
+
+        Stato individuale
+        & Posizione, velocità, Bitcoin detenuti e liquidità \\
+        \midrule
+
+        Eterogeneità
+        & Tre specie e portafogli iniziali differenti \\
+        \midrule
+
+        Regole individuali
+        & Flocking, spostamento, probabilità di trading \\
+        \midrule
+
+        Interazioni
+        & Reti di flockmates e repulsione tra specie \\
+        \midrule
+
+        Stocasticità
+        & Posizioni, direzioni e decisioni casuali \\
+        \midrule
+
+        Grandezze aggregate
+        & Prezzo, volume, parametro d'ordine \\
+
+        \bottomrule
+    \end{tabularx}
+
+    \caption{Caratteristiche del modello ad agenti (ABM).}
+    \label{tab:caratteristiche-abm}
+\end{table}
+
+Quindi non c'è motivo di negare che sia un ABM.
+Tuttavia, nel modello attuale esistono anche componenti introdotte direttamente a livello macroscopico, come il fattore di memoria del prezzo applicato 
+al volume. La presenza di componenti fenomenologiche macroscopiche non elimina il carattere agent-based, ma rende il modello ibrido tra regole 
+microscopiche e chiusure fenomenologiche aggregate. Soprattutto, non possiamo ancora dire che prezzo e volatilità emergano da un meccanismo 
+finanziario realistico. Che cosa manca per parlare di un mercato artificiale convincente?\\
+La parte più debole è la compravendita.
+Nel codice, ogni agente modifica la propria liquidità e i Bitcoin detenuti quando decide di comprare o vendere. Non abbiamo però definito chi sia 
+la sua controparte. Nel mondo reale, un acquisto eseguito deve corrispondere a una vendita eseguita. Inoltre, il prezzo può variare perché gli 
+ordini aggrediscono livelli differenti di liquidità disponibile.
+
+
+
+
+
+
+
+
+
+
 \section{Elementi di teoria}
 \subsection{Introduzione}
 Per la calibrazione dei nostro modello agent-based utilizzeremo il metodo noto come Method of Simulated Moments (MSM).
