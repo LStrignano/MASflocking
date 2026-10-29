@@ -193,8 +193,8 @@ def relative_drift(values: pd.Series) -> float:
 def main() -> int:
     here = Path(__file__).resolve().parent
     ap = argparse.ArgumentParser(description="Analisi statistica di ensemble BehaviorSpace Bitcoin")
-    ap.add_argument("--ensemble", type=Path, default=here / "dati_bitcoin_ensemble.csv")
-    ap.add_argument("--real", type=Path, default=here / "dati_btc.csv")
+    ap.add_argument("--ensemble", type=Path, default=here / "model/dati_bitcoin_ensemble.csv")
+    ap.add_argument("--real", type=Path, default=here / "model/dati_btc.csv")
     ap.add_argument("--out", type=Path, default=here / "risultati_analisi")
     ap.add_argument("--bootstrap-reps", type=int, default=1000)
     ap.add_argument("--block-length", type=int, default=20)
@@ -326,6 +326,8 @@ def main() -> int:
     plt.plot(sample_tick, np.mean(all_model_prices, axis=0), linewidth=2,
              label="Media dei prezzi simulati")
     plt.plot(sample_tick, real_price, linewidth=2, label="Prezzo reale (solo confronto)")
+    plt.yscale("log")
+    plt.ylabel("Prezzo BTC (USD) - scala logaritmica")
     plt.xlabel("Tick NetLogo (fine del passo)")
     plt.ylabel("Prezzo (USD)")
     plt.title("Ensemble: fase endogena, traiettorie e media")

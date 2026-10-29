@@ -813,7 +813,7 @@ to-report bitcoin-c report sum [bitcoin-held] of agents-c end]]></code>
     <input x="26" multiline="false" y="70" height="60" variable="spawn-radius" type="number" width="156" sizeVersion="0">500.0</input>
     <input x="27" multiline="false" y="137" height="60" variable="temperature" type="number" width="156" sizeVersion="0">25.0</input>
     <input x="190" multiline="false" y="138" height="60" variable="k" type="number" width="156" sizeVersion="0">10.0</input>
-    <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">1000.0</input>
+    <input x="27" multiline="false" y="205" height="60" variable="population-a" type="number" width="156" sizeVersion="0">50.0</input>
     <input x="191" multiline="false" y="205" height="60" variable="population-b" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="27" multiline="false" y="274" height="60" variable="population-c" type="number" width="156" sizeVersion="0">0.0</input>
     <input x="22" multiline="false" y="469" height="60" variable="trade-interval" type="number" width="156" sizeVersion="0">5.0</input>
@@ -1863,6 +1863,56 @@ to-report bitcoin-c report sum [bitcoin-held] of agents-c end]]></code>
         </enumeratedValueSet>
         <enumeratedValueSet variable="window-size">
           <value value="53"></value>
+        </enumeratedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="BTC_statistiche_ensemble (1)" repetitions="10" sequentialRunOrder="true" runMetricsEveryStep="true" timeLimit="2200">
+      <setup>setup</setup>
+      <go>go</go>
+      <metrics>
+        <metric>ticks</metric>
+        <metric>model-price</metric>
+        <metric>model-trading-volume</metric>
+        <metric>model-trading-volume-usd</metric>
+        <metric>real-trading-volume-usd</metric>
+        <metric>current-disabled?</metric>
+        <metric>model-return</metric>
+        <metric>model-volatility</metric>
+        <metric>order-parameter</metric>
+        <metric>current-hype</metric>
+        <metric>total-bitcoin</metric>
+        <metric>total-cash</metric>
+        <metric>btc-price</metric>
+        <metric>trade-size</metric>
+        <metric>price-sensitivity</metric>
+        <metric>gamma-vol</metric>
+        <metric>spawn-radius</metric>
+        <metric>repulsion-strength</metric>
+        <metric>repulsion-radius</metric>
+        <metric>h</metric>
+        <metric>k</metric>
+        <metric>base-stubbornness</metric>
+        <metric>population-a</metric>
+        <metric>population-b</metric>
+        <metric>population-c</metric>
+        <metric>beta-vol</metric>
+        <metric>hype-sensitivity</metric>
+        <metric>min-stubbornness</metric>
+        <metric>temperature</metric>
+        <metric>number-of-followers</metric>
+        <metric>pearson-threshold</metric>
+        <metric>num-days</metric>
+        <metric>window-size</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="scenario">
+          <value value="&quot;csv&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="trade-interval">
+          <value value="1"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="tick-switch-fase">
+          <value value="900"></value>
         </enumeratedValueSet>
       </constants>
     </experiment>
